@@ -1,0 +1,8 @@
+battery_log.xlsx
+venus_logger.log
+*.pyc
+__pycache__/
+.env
+playwright-tests/.pytest_cache/
+playwright-tests/test-results/
+frontend/node_modules/

@@ -1,0 +1,46 @@
+services:
+  venus-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: venus
+      POSTGRES_USER: venus
+      POSTGRES_PASSWORD: venus
+    volumes:
+      - venus-db-data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - venus-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U venus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  venus-backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://venus:venus@venus-db:5432/venus
+      VENUS_HOST: 192.168.178.103
+      VENUS_PORT: "80"
+      PORTAL_ID: c0619ab43e45
+    depends_on:
+      venus-db:
+        condition: service_healthy
+    networks:
+      - venus-net
+
+  venus-frontend:
+    build: ./frontend
+    ports:
+      - "8081:80"
+    depends_on:
+      - venus-backend
+    networks:
+      - venus-net
+
+networks:
+  venus-net:
+
+volumes:
+  venus-db-data:
