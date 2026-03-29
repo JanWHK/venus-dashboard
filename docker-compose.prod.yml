@@ -34,9 +34,12 @@ services:
       - venus-backend
     networks:
       - venus-net
+      - dokploy-network
 
 networks:
   venus-net:
+  dokploy-network:
+    external: true
 
 volumes:
   venus-db-data:
