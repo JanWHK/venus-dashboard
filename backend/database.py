@@ -1,12 +1,20 @@
 import os
+import urllib.parse
 import datetime
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 from sqlalchemy import Column, BigInteger, Integer, Float, DateTime, text
 
-DATABASE_URL = os.environ["DATABASE_URL"]
-SYNC_DATABASE_URL = DATABASE_URL.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+# Build DB URL from individual parts so special characters in passwords are safe
+_pg_password = urllib.parse.quote(os.environ.get("POSTGRES_PASSWORD", "venus"), safe="")
+_pg_user = os.environ.get("POSTGRES_USER", "venus")
+_pg_host = os.environ.get("POSTGRES_HOST", "venus-db")
+_pg_port = os.environ.get("POSTGRES_PORT_DB", "5432")
+_pg_db   = os.environ.get("POSTGRES_DB", "venus")
+
+DATABASE_URL = f"postgresql+asyncpg://{_pg_user}:{_pg_password}@{_pg_host}:{_pg_port}/{_pg_db}"
+SYNC_DATABASE_URL = f"postgresql+psycopg2://{_pg_user}:{_pg_password}@{_pg_host}:{_pg_port}/{_pg_db}"
 
 engine = create_async_engine(DATABASE_URL, echo=False)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
