@@ -20,6 +20,13 @@ MQTT_TOPICS = {
     "ac_out_current":   f"N/{PORTAL_ID}/vebus/275/Ac/Out/L1/I",
     "ac_out_power":     f"N/{PORTAL_ID}/vebus/275/Ac/Out/L1/P",
     "ac_out_frequency": f"N/{PORTAL_ID}/vebus/275/Ac/Out/L1/F",
+    "solar_pv_voltage":   f"N/{PORTAL_ID}/solarcharger/274/Pv/V",
+    "solar_pv_current":   f"N/{PORTAL_ID}/solarcharger/274/Pv/I",
+    "solar_pv_power":     f"N/{PORTAL_ID}/solarcharger/274/Yield/Power",
+    "solar_batt_voltage": f"N/{PORTAL_ID}/solarcharger/274/Dc/0/Voltage",
+    "solar_batt_current": f"N/{PORTAL_ID}/solarcharger/274/Dc/0/Current",
+    "solar_yield_total":  f"N/{PORTAL_ID}/solarcharger/274/History/Overall/UserYield",
+    "solar_yield_system": f"N/{PORTAL_ID}/solarcharger/274/History/Overall/SystemYield",
 }
 
 

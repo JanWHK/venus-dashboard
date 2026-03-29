@@ -6,3 +6,5 @@ __pycache__/
 playwright-tests/.pytest_cache/
 playwright-tests/test-results/
 frontend/node_modules/
+*.png
+*.jpg

@@ -31,6 +31,19 @@ const METRIC_GROUPS = [
     ],
   },
   {
+    id: 'solar',
+    title: 'Solar MPPT',
+    metrics: [
+      { key: 'solar_pv_power',     label: 'PV Power (W)',      color: '#facc15' },
+      { key: 'solar_pv_voltage',   label: 'PV Voltage (V)',    color: '#60a5fa' },
+      { key: 'solar_pv_current',   label: 'PV Current (A)',    color: '#f59e0b' },
+      { key: 'solar_batt_voltage', label: 'Batt Voltage (V)',  color: '#4ade80' },
+      { key: 'solar_batt_current', label: 'Batt Current (A)',  color: '#a78bfa' },
+      { key: 'solar_yield_total',  label: 'Total Yield (kWh)', color: '#fb923c' },
+      { key: 'solar_yield_system', label: 'Sys Yield (kWh)',   color: '#f87171' },
+    ],
+  },
+  {
     id: 'ac_out',
     title: 'AC Output',
     metrics: [
@@ -169,7 +182,7 @@ export default function Dashboard() {
   return (
     <div>
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4 mb-4 sm:mb-6">
         {/* Time range */}
         <div className="flex gap-1" data-testid="time-range-selector">
           {TIME_RANGES.map(r => (
@@ -188,7 +201,7 @@ export default function Dashboard() {
           ))}
         </div>
 
-        <div className="ml-auto text-xs text-gray-500">
+        <div className="w-full sm:w-auto sm:ml-auto text-xs text-gray-500">
           {loading
             ? 'Loading…'
             : lastFetched
@@ -197,11 +210,11 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
         {/* Sidebar: metric toggles */}
-        <aside className="w-48 shrink-0">
+        <aside className="sm:w-48 sm:shrink-0">
           {METRIC_GROUPS.map(group => (
-            <div key={group.id} className="mb-4">
+            <div key={group.id} className="mb-2 sm:mb-4">
               <button
                 data-testid={`group-toggle-${group.id}`}
                 onClick={() => toggleGroup(group)}
@@ -209,12 +222,12 @@ export default function Dashboard() {
               >
                 {group.title}
               </button>
-              <div className="space-y-1">
+              <div className="flex flex-wrap gap-x-3 gap-y-1 sm:block sm:space-y-1">
                 {group.metrics.map(m => (
                   <label
                     key={m.key}
                     data-testid={`metric-toggle-${m.key}`}
-                    className="flex items-center gap-2 cursor-pointer text-sm text-gray-300 hover:text-white"
+                    className="flex items-center gap-1 sm:gap-2 cursor-pointer text-sm text-gray-300 hover:text-white"
                   >
                     <input
                       type="checkbox"
