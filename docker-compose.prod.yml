@@ -35,6 +35,14 @@ services:
     networks:
       - venus-net
       - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.venus-frontend.rule=Host(`victron.afrinam.com`)"
+      - "traefik.http.routers.venus-frontend.entrypoints=websecure"
+      - "traefik.http.routers.venus-frontend.tls=true"
+      - "traefik.http.routers.venus-frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.venus-frontend.loadbalancer.server.port=80"
+      - "traefik.docker.network=dokploy-network"
 
 networks:
   venus-net:
