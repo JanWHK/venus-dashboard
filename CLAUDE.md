@@ -1,4 +1,17 @@
-# Victron Venus OS Logger
+# Victron Venus OS Logger & Dashboard
+
+## Web Dashboard
+- **Local:** http://localhost:8081 (`docker compose up -d` with `docker-compose.yml`)
+- **Production:** https://victron.afrinam.com (Dokploy, `docker-compose.prod.yml`)
+- **GitHub:** `JanWHK/venus-dashboard`
+- **Stack:** FastAPI + APScheduler + SQLAlchemy/asyncpg + React 18 + Recharts + PostgreSQL 15
+- **Dokploy admin:** http://100.111.222.14:8000 (Tailscale)
+
+### Production env vars (set in Dokploy UI)
+`DATABASE_URL` and `SYNC_DATABASE_URL` use `%40` for `@` in the password (URL encoding required).
+If Postgres auth fails after redeployment, exec into `venus-db` and run:
+`psql -U venus -d venus -c "ALTER ROLE venus WITH PASSWORD 'newpassword';"`
+(The `venus-db-data` named volume keeps the password from first init — changing the env var alone doesn't update it.)
 
 ## Device
 - **URL:** http://192.168.178.103/gui-v1 (noVNC console) / http://192.168.178.103/gui-v2 (Qt WebAssembly UI)

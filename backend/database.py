@@ -44,6 +44,13 @@ class Reading(Base):
     ac_out_current = Column(Float)
     ac_out_power = Column(Float)
     ac_out_frequency = Column(Float)
+    solar_pv_voltage   = Column(Float)
+    solar_pv_current   = Column(Float)
+    solar_pv_power     = Column(Float)
+    solar_batt_voltage = Column(Float)
+    solar_batt_current = Column(Float)
+    solar_yield_total  = Column(Float)
+    solar_yield_system = Column(Float)
 
 
 async def init_db():
@@ -53,6 +60,12 @@ async def init_db():
             CREATE INDEX IF NOT EXISTS idx_readings_recorded_at
             ON readings (recorded_at DESC)
         """))
+        for col in ["solar_pv_voltage", "solar_pv_current", "solar_pv_power",
+                    "solar_batt_voltage", "solar_batt_current",
+                    "solar_yield_total", "solar_yield_system"]:
+            await conn.execute(text(
+                f"ALTER TABLE readings ADD COLUMN IF NOT EXISTS {col} FLOAT"
+            ))
     # Insert default settings row if missing
     async with SessionLocal() as session:
         result = await session.execute(text("SELECT COUNT(*) FROM settings"))

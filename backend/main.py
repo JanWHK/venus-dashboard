@@ -127,6 +127,13 @@ async def get_readings(
             "ac_out_current": r.ac_out_current,
             "ac_out_power": r.ac_out_power,
             "ac_out_frequency": r.ac_out_frequency,
+            "solar_pv_voltage":   r.solar_pv_voltage,
+            "solar_pv_current":   r.solar_pv_current,
+            "solar_pv_power":     r.solar_pv_power,
+            "solar_batt_voltage": r.solar_batt_voltage,
+            "solar_batt_current": r.solar_batt_current,
+            "solar_yield_total":  r.solar_yield_total,
+            "solar_yield_system": r.solar_yield_system,
         }
         for r in reversed(rows)
     ]

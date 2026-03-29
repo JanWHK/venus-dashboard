@@ -7,7 +7,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-950 text-gray-100">
-        <header className="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center gap-8">
+        <header className="bg-gray-900 border-b border-gray-800 px-3 py-2 sm:px-6 sm:py-3 flex items-center gap-4 sm:gap-8">
           <span className="font-bold text-lg text-green-400">⚡ Venus OS</span>
           <nav className="flex gap-4">
             <NavLink
@@ -38,7 +38,7 @@ export default function App() {
           </nav>
         </header>
 
-        <main className="p-6">
+        <main className="p-3 sm:p-6">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/settings" element={<Settings />} />
