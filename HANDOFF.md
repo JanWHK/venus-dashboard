@@ -83,14 +83,22 @@ Done and committed:
 
 Not done (check OPEN_ISSUES.md for detail):
 
-- Grid card empty — needs vebus AC-in fallback mapping or a grid meter.
+- Grid power still has no live source on this install (AC-in disconnected, no meter);
+  the MultiPlus AC-in fallback is implemented and fills the card once an input is live.
 - Production (Dokploy) not redeployed with the MQTT env block; also needs network
   reachability to the GX from wherever Dokploy runs.
-- Branch not pushed / no PR; `main` is far behind.
 - Legacy cron still failing every 10 min — recommend deleting the crontab line.
 - VLAN 21 handoff checklist steps 2–5 (routed-access verification, temp-profile
   cleanup, security follow-ups) — `tenda-recovery-vlan21` is still active and may be
   masking the real routed path.
+
+Done since this handoff was written (2026-09-21):
+
+- Generator run log: `generator_runs` table + run state machine in the collector;
+  exact durations from the Timers counter, kWh/peak W once genset power appears.
+- Electrical detail on the dashboard: AC out V/A/Hz, DC loads, PV volts, inverter
+  state, AC-in fallback for the grid card.
+- Generator flow node moved into the energy-source column with the solar/grid cards.
 
 ## Credentials policy
 

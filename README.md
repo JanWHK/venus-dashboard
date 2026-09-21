@@ -1,6 +1,6 @@
 # Helio
 
-A private, live-first dashboard for a Victron GX system. The interface includes an animated energy flow (with generator node), a five-metric overview row, battery gauge, live chart with stored 24h/7d history, searchable device telemetry, multi-user accounts with an admin People manager, light/dark theming, and a login page.
+A private, live-first dashboard for a Victron GX system. The interface includes an animated energy flow (with generator node), a five-metric overview row, battery gauge, live chart with stored 24h/7d history, VRM-level electrical detail (volts, amps, hertz, DC loads, PV volts, inverter state), a persisted generator run log, searchable device telemetry, multi-user accounts with an admin People manager, light/dark theming, and a login page.
 
 ## Run locally
 
@@ -28,7 +28,7 @@ Configure through `.env` (copy `.env.example`):
 
 The collector subscribes to `N/<portal>/<service>/#` for system, battery, VE.Bus, solar charger, grid, generator (start/stop), genset, inverter, AC load, tank, temperature, charger and DC generator services. A keepalive is published every ~30 seconds and on reconnect to request telemetry bursts. It never sends control writes. Missing or stale values display a dash, never a fabricated zero. Device details include the original metric paths and identify stale readings.
 
-Known data gaps on the current installation: no `grid` service exists (grid flows through the MultiPlus), and no genset reports state/power yet — the UI shows those as awaiting/not-reported rather than inventing numbers.
+Known data gaps on the current installation: no `grid` service exists (grid flows through the MultiPlus) and no genset device reports state/power. The dashboard bridges both honestly: `grid_power` falls back to the MultiPlus AC-in reading whenever an input is actually connected (`Ac/ActiveIn/ActiveInput` 0/1), and generator runs are recorded from the GX lifetime counter `Timers/TimeOnGenerator` — each session lands in the `generator_runs` table with its exact duration, while kWh and peak kW appear automatically once genset power telemetry exists. Anything still unknown displays as a dash rather than an invented number.
 
 ## Accounts
 
@@ -43,6 +43,7 @@ Known data gaps on the current installation: no `grid` service exists (grid flow
 - MQTT cache: at most 6,000 scalar telemetry paths. Readings expire after 90 seconds and are invalidated on reconnect.
 - Live chart: 90 points at 10-second intervals, held in memory (15 minutes). Restarting clears this buffer.
 - History: **15-minute summaries by default**, user-settable to off / 5 / 10 / 15 / 30 / 60 minutes. Snapshots store solar power, grid power, home power, battery power, generator power and charge percentage — sampled readings, not averages or energy totals.
+- Generator runs: every genset session is persisted in `generator_runs` (start, end, exact duration from the Timers counter, kWh and peak W when power data exists). The active run is refreshed every 10 seconds, so a backend restart loses at most the current tick; runs left open by a restart are closed on startup using the already-exact duration.
 - Existing `readings` and `settings` tables remain intact. The dashboard uses separate summary/settings tables; the history screen displays new summaries only.
 - Appearance (light/dark/system) is per device, stored in localStorage; dark chart palettes are contrast- and CVD-validated.
 - Cookies are HttpOnly and SameSite=Strict. Production forces Secure cookies; local HTTP uses `COOKIE_SECURE=false`.

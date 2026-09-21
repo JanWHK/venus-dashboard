@@ -36,11 +36,14 @@ If Postgres auth fails after redeployment, exec into `venus-db` and run:
 | solarcharger (SmartSolar MPPT 250/70 rev3) | `275` | VRM labels it MPPT-274/275; instance is 275 |
 | battery (DYNESS-L) | `512` | SoC, voltage, current, temperature |
 
-- **No `grid` service** — grid flows through the MultiPlus; the Grid card stays empty
-  until a meter is added or vebus AC-in is mapped as a fallback.
+- **No `grid` service** — grid flows through the MultiPlus. `grid_power` falls back to
+  vebus `Ac/ActiveIn/L1/P` when `Ac/ActiveIn/ActiveInput` is 0 or 1 (an input is really
+  connected); today it is 240 (none connected), so the card stays empty by design.
 - **No `generator` service topics** — start/stop is configured (4.3 h lifetime runtime in
-  `Timers/TimeOnGenerator`) but no genset reports state/power yet. UI shows
-  "Not reported by GX" until one does.
+  `Timers/TimeOnGenerator`) but no genset reports state/power yet. Runs are still
+  recorded: the backend opens a `generator_runs` session whenever the Timers counter
+  advances (exact duration; kWh/peak W appear automatically once `Ac/Genset/*` power
+  starts reporting). UI shows "Not reported by GX" plus the last run.
 
 ## Legacy logger (superseded — see OPEN_ISSUES.md)
 `venus_logger.py` / `venus_discover.py` / `battery_log.xlsx` are the original Excel
@@ -50,6 +53,9 @@ Either delete the crontab line or reinstall the deps if the Excel export is stil
 
 ## History recording
 - `energy_samples` table: solar/grid/load/battery power, battery SoC, generator power.
+- `generator_runs` table: one row per genset run — start/end, exact duration (Timers
+  counter delta), kWh + peak W when power telemetry exists. Active run upserted every
+  10 s; runs left open by a restart are closed at startup with `ended_at = updated_at`.
 - Default every 15 minutes (user-settable in Settings: off / 5 / 10 / 15 / 30 / 60 min).
 - Feeds the 24h/7d chart via `/api/readings`; live chart is memory-only (15 min).
 

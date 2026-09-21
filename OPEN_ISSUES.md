@@ -5,19 +5,25 @@
 
 ## Open items
 
-### Grid exchange card has no data
-- **Cause:** the GX publishes no `grid` service — grid flows through the MultiPlus
-  (`vebus/275/Ac/ActiveIn/*`), and no grid meter is installed.
-- **Options:** map vebus AC-in power as a `grid_power` fallback in
-  `backend/collector.py`, or install a grid meter. Until then the card and chart series
-  stay empty.
+### Grid power has no live source on this installation
+- **Cause:** the GX publishes no `grid` service and no grid meter is installed; the
+  MultiPlus AC-in is currently disconnected (`Ac/ActiveIn/ActiveInput = 240`).
+- **Status:** the fallback is implemented (2026-09-21) — `grid_power` now maps
+  `vebus/*/Ac/ActiveIn/L1/P` whenever an input is active (`ActiveInput` 0/1), so the
+  card and chart series will fill the moment grid power actually flows. A dedicated
+  grid meter would still give cleaner per-phase data.
 
-### Generator state/power not published
+### Generator energy needs a genset power source
 - **Cause:** generator start/stop is configured on the GX (4.3 h lifetime runtime in
   `system/0/Timers/TimeOnGenerator`) but no genset device reports
   `generator/0/State` or `Ac/Genset/*` power. All `Ac/Genset/*` topics exist but are null.
-- **Impact:** none — UI shows the card/flow node with "Not reported by GX" and the
-  lifetime runtime. It lights up automatically if a genset is connected and reporting.
+- **Status:** run **tracking** is implemented (2026-09-21): the backend opens a
+  `generator_runs` session whenever the Timers counter advances, so every run is
+  persisted with its exact duration even without a genset device. **Energy** (kWh and
+  peak W) stays null until `Ac/Genset/*` power or a genset service starts reporting —
+  it will then be integrated automatically with no further changes.
+- **Impact:** none — the UI shows the last run's duration and, once available, its
+  energy alongside the lifetime runtime.
 
 ### Legacy logger cron fails every 10 minutes
 - `crontab` still runs `/usr/bin/python3 /home/janj/victron/venus_logger.py`, which
@@ -61,4 +67,8 @@
 ### Potential extra metrics (implemented in Helio)
 - Solar power, battery power/temperature and generator runtime are all live now.
 - `solar_yield_today` (`solarcharger/*/History/Daily/0/Yield`) feeds the "harvested
-  today" line. Grid remains the only gap (see above).
+  today" line.
+- Electrical detail (2026-09-21): AC out V/A/VA/Hz, AC-in V/A/Hz, DC loads, PV volts,
+  and inverter state are surfaced on the dashboard (flow captions, metric chips,
+  System pulse rows). Grid remains the only gap (see above).
+- Generator run log (2026-09-21): see "Generator energy needs a genset power source".
