@@ -47,7 +47,8 @@ If Postgres auth fails after redeployment, exec into `venus-db` and run:
   `generator_runs` with exact duration, kWh and peak W (power telemetry works since
   2026-09-21). While the generator feeds, the UI shows a **Generator input** panel:
   total in = AC loads + DC loads (GX) + battery charging, where charging is the
-  remainder so the identity is exact.
+  remainder so the identity is exact; the split bar carries percentage labels that
+  always sum to 100 %.
 - `system/0/Ac/Consumption/L1/Power` ≡ vebus `Ac/Out/L1/P` (Home consumption = AC out).
   `Dc/System/Power` is a noisy GX DC aggregate (swings a few hundred W) — it feeds the
   panel's DC-loads line, so expect the tile to wobble.

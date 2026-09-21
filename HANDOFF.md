@@ -127,6 +127,10 @@ assumptions in the older sections and produced six deployed commits:
   heading and on the flow diagram's generator node caption while it feeds.
 - `ea53f92` / `3db65be` — solar card and flow solar node switch **sun → moon** when
   `solar_power` is 0/null.
+- `039efca` — the split bar gained a **percentage row**: a centered label under each
+  segment in muted ink, sharing its exact width. Shares always read a clean 100 %
+  (AC + DC rounded, charging carries the remainder, clamped ≥ 0); labels follow
+  segments, so DC's hides while the GX gives no `Dc/System` reading.
 - `1f52fad` (earlier the same day) — the Generator input panel itself.
 
 All six were deployed to production via the deploy skill with all 7 checks green, and

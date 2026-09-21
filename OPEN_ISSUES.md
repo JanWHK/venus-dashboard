@@ -92,6 +92,7 @@
   System pulse rows). Grid remains the only gap (see above).
 - Generator run log (2026-09-21): see "Generator energy — resolved" above.
 - Generator input split (2026-09-22): live panel + flow captions while the genset
-  feeds (commits `1f52fad`, `ebff508`, `8ba193d`, `4016584`, `41edeec`).
+  feeds (commits `1f52fad`, `ebff508`, `8ba193d`, `4016584`, `41edeec`), with
+  percentage labels under the split bar that always sum to 100 % (`039efca`).
 - Sun/moon idle icons (2026-09-22): the solar card and flow node switch to a crescent
   when `solar_power` is 0/null (`ea53f92`, `3db65be`).
