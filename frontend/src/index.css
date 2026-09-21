@@ -2251,6 +2251,16 @@ input {
   display: inline-flex;
   margin: 4px 0 10px;
 }
+.heading-side {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.unit-segmented button {
+  padding: 7px 14px;
+}
 .avatar-inline {
   width: 30px;
   height: 30px;

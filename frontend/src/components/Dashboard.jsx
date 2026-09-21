@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { api } from "../api";
 import { demoSnapshot } from "../demo";
+import { formatPower, setPowerUnit, usePowerUnit } from "../units";
 import Icon from "./Icon";
 
 export const number = (value, decimals = 1) =>
@@ -20,8 +21,6 @@ export const number = (value, decimals = 1) =>
         minimumFractionDigits: decimals,
       })
     : "—";
-const power = (value) =>
-  number(value == null ? null : Math.abs(value) / 1000, 2);
 const batteryState = (value) =>
   value == null
     ? "Awaiting data"
@@ -148,6 +147,7 @@ const CHART_COLORS = {
 };
 
 function MetricCard({ icon, title, value, detail, tone, trend }) {
+  const unit = usePowerUnit();
   return (
     <article className={`metric-card ${tone}`}>
       <div className="metric-top">
@@ -157,8 +157,8 @@ function MetricCard({ icon, title, value, detail, tone, trend }) {
         </span>
       </div>
       <div className="metric-value">
-        {power(value)}
-        <span>kW</span>
+        {formatPower(value, unit)}
+        <span>{unit}</span>
       </div>
       <div className="metric-bottom">
         <span>{detail}</span>
@@ -170,6 +170,7 @@ function MetricCard({ icon, title, value, detail, tone, trend }) {
 }
 
 function Flow({ metrics: m, live }) {
+  const unit = usePowerUnit();
   const flow = (v, reverse = false) =>
     live && v != null && Math.abs(v) > 20
       ? `flow-line active ${reverse ? "reverse" : ""}`
@@ -217,7 +218,7 @@ function Flow({ metrics: m, live }) {
           <div>
             <span>Solar array</span>
             <strong>
-              {power(m.solar_power)} <small>kW</small>
+              {formatPower(m.solar_power, unit)} <small>{unit}</small>
             </strong>
           </div>
           <span className="node-caption">
@@ -237,7 +238,7 @@ function Flow({ metrics: m, live }) {
           <div>
             <span>Grid connection</span>
             <strong>
-              {power(m.grid_power)} <small>kW</small>
+              {formatPower(m.grid_power, unit)} <small>{unit}</small>
             </strong>
           </div>
           <span className="node-caption">
@@ -259,7 +260,7 @@ function Flow({ metrics: m, live }) {
           <div>
             <span>Generator</span>
             <strong>
-              {power(m.generator_power)} <small>kW</small>
+              {formatPower(m.generator_power, unit)} <small>{unit}</small>
             </strong>
           </div>
           <span className="node-caption">
@@ -281,7 +282,7 @@ function Flow({ metrics: m, live }) {
           <div>
             <span>Your home</span>
             <strong>
-              {power(m.load_power)} <small>kW</small>
+              {formatPower(m.load_power, unit)} <small>{unit}</small>
             </strong>
           </div>
           <span className="node-caption">
@@ -298,7 +299,9 @@ function Flow({ metrics: m, live }) {
             {batteryState(m.battery_power)}
             {timeToGo && ` · ${timeToGo}`}
           </span>
-          <strong>{power(m.battery_power)} kW</strong>
+          <strong>
+            {formatPower(m.battery_power, unit)} {unit}
+          </strong>
         </div>
       </div>
       <div className="flow-caption">
@@ -313,6 +316,7 @@ function Flow({ metrics: m, live }) {
 }
 
 function Battery({ metrics: m }) {
+  const unit = usePowerUnit();
   const soc =
     m.battery_soc == null ? 0 : Math.max(0, Math.min(100, m.battery_soc));
   return (
@@ -349,7 +353,7 @@ function Battery({ metrics: m }) {
       >
         <Icon name="bolt" size={13} />
         {batteryState(m.battery_power)}
-        {m.battery_power != null && ` · ${power(m.battery_power)} kW`}
+        {m.battery_power != null && ` · ${formatPower(m.battery_power, unit)} ${unit}`}
       </span>
       <div className="battery-details">
         <div>
@@ -381,6 +385,7 @@ function EnergyChart({ liveData, demo, historyOnly }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const theme = useTheme();
+  const unit = usePowerUnit();
   const colors = CHART_COLORS[theme] || CHART_COLORS.light;
   const [visible, setVisible] = useState({
     solar_power: true,
@@ -541,14 +546,14 @@ function EnergyChart({ liveData, demo, historyOnly }) {
                 minTickGap={45}
               />
               <YAxis
-                tickFormatter={(v) => `${number(v / 1000, 1)}`}
+                tickFormatter={(v) => formatPower(v, unit, 1)}
                 tick={{ fontSize: 10, fill: colors.tick }}
                 axisLine={false}
                 tickLine={false}
               />
               <Tooltip
                 labelFormatter={(v) => new Date(v).toLocaleString()}
-                formatter={(v, name) => [`${number(v / 1000, 2)} kW`, name]}
+                formatter={(v, name) => [`${formatPower(v, unit, 2)} ${unit}`, name]}
                 contentStyle={{
                   borderRadius: 12,
                   border: `1px solid ${colors.tooltipBorder}`,
@@ -582,6 +587,7 @@ function EnergyChart({ liveData, demo, historyOnly }) {
 
 export default function Dashboard({ demo, historyOnly = false }) {
   const { data, error } = useTelemetry(demo);
+  const unit = usePowerUnit();
   const m = data?.metrics || {};
   const live = data?.status === "live";
   return (
@@ -598,21 +604,37 @@ export default function Dashboard({ demo, historyOnly = false }) {
               : "A little sunshine. A lot of possibility. Here’s your system right now."}
           </p>
         </div>
-        <div className={`connection-label ${live ? "connected" : ""}`}>
-          <span className="pulse-dot" />
-          <div>
-            <strong>
-              {demo
-                ? "Demo system"
-                : live
-                  ? "System connected"
-                  : data?.status === "waiting"
-                    ? "Waiting for readings"
-                    : "GX not connected"}
-            </strong>
-            <span>
-              {demo ? "Illustrative readings" : data?.host || "192.168.21.10"}
-            </span>
+        <div className="heading-side">
+          {!historyOnly && (
+            <div className="segmented unit-segmented" role="group" aria-label="Power unit">
+              {["kW", "W"].map((u) => (
+                <button
+                  key={u}
+                  aria-pressed={unit === u}
+                  className={unit === u ? "selected" : ""}
+                  onClick={() => setPowerUnit(u)}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className={`connection-label ${live ? "connected" : ""}`}>
+            <span className="pulse-dot" />
+            <div>
+              <strong>
+                {demo
+                  ? "Demo system"
+                  : live
+                    ? "System connected"
+                    : data?.status === "waiting"
+                      ? "Waiting for readings"
+                      : "GX not connected"}
+              </strong>
+              <span>
+                {demo ? "Illustrative readings" : data?.host || "192.168.21.10"}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -749,7 +771,9 @@ export default function Dashboard({ demo, historyOnly = false }) {
             <div className="system-row">
               <span>DC loads</span>
               <strong>
-                {m.dc_load_power != null ? `${number(m.dc_load_power, 0)} W` : "—"}
+                {m.dc_load_power != null
+                  ? `${formatPower(m.dc_load_power, unit)} ${unit}`
+                  : "—"}
               </strong>
             </div>
             <div className="system-row">
