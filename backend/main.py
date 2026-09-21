@@ -7,11 +7,11 @@ from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from pydantic import AwareDatetime, BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from auth import initialize_auth, require_admin, require_csrf_header, require_user, router as auth_router
 from collector import collector
-from database import DashboardSetting, EnergySample, SessionLocal, engine, init_db
+from database import DashboardSetting, EnergySample, GeneratorRun, SessionLocal, engine, init_db
 
 VALID_INTERVALS = [0, 300, 600, 900, 1800, 3600]
 SUMMARY_FIELDS = ["solar_power", "grid_power", "load_power", "battery_power", "battery_soc", "generator_power"]
@@ -27,6 +27,50 @@ async def save_summary(snapshot):
         session.add(EnergySample(recorded_at=datetime.now(timezone.utc), **values))
         await session.commit()
     return True
+
+
+def active_run_duration(active):
+    """Exact seconds so far: Timers counter delta when available."""
+    if active["duration_base"] is not None and collector.timers_prev is not None:
+        return max(0.0, collector.timers_prev - active["duration_base"])
+    return max(0.0, time.time() - active["started_at"])
+
+
+def run_row_values(run, ended=False):
+    duration = run.get("duration_seconds")
+    if duration is None and not ended:
+        duration = active_run_duration(run)
+    return {
+        "duration_seconds": duration,
+        "energy_kwh": round(run["energy_wh"] / 1000, 4) if run["power_seen"] else None,
+        "peak_power_w": run["peak_w"],
+        "updated_at": datetime.now(timezone.utc),
+    }
+
+
+async def persist_generator_runs():
+    async with SessionLocal() as session:
+        for run in collector.drain_generator_runs():
+            session.add(GeneratorRun(
+                started_at=datetime.fromtimestamp(run["started_at"], timezone.utc),
+                ended_at=datetime.fromtimestamp(run["ended_at"], timezone.utc),
+                **run_row_values(run, ended=True),
+            ))
+        active = collector.generator_run
+        row = (await session.execute(
+            select(GeneratorRun).where(GeneratorRun.ended_at.is_(None))
+        )).scalar_one_or_none()
+        if active:
+            values = run_row_values(active)
+            values["started_at"] = datetime.fromtimestamp(active["started_at"], timezone.utc)
+            if row is None:
+                session.add(GeneratorRun(ended_at=None, **values))
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+        elif row is not None:
+            row.ended_at = row.updated_at
+        await session.commit()
 
 
 async def run_telemetry():
@@ -47,6 +91,10 @@ async def run_telemetry():
                 await save_summary(snapshot)
             except Exception:
                 logging.getLogger("uvicorn.error").exception("Could not save energy summary")
+        try:
+            await persist_generator_runs()
+        except Exception:
+            logging.getLogger("uvicorn.error").exception("Could not save generator run")
         await asyncio.sleep(10)
 
 
@@ -55,6 +103,12 @@ async def lifespan(app: FastAPI):
     global recording_interval
     await init_db()
     await initialize_auth()
+    # Runs left open by a previous process can no longer see their real end.
+    # The duration column already holds the exact seconds; close the window.
+    async with SessionLocal() as session:
+        await session.execute(
+            text("UPDATE generator_runs SET ended_at = updated_at WHERE ended_at IS NULL"))
+        await session.commit()
     async with SessionLocal() as session:
         setting = await session.get(DashboardSetting, 1)
         recording_interval = setting.interval_seconds if setting else 900
@@ -87,9 +141,33 @@ async def health():
     return {"status": "ok"}
 
 
+def run_payload(row):
+    return {
+        "started_at": row.started_at.isoformat(),
+        "ended_at": row.ended_at.isoformat() if row.ended_at else None,
+        "duration_seconds": row.duration_seconds,
+        "energy_kwh": row.energy_kwh,
+        "peak_power_w": row.peak_power_w,
+    }
+
+
 @app.get("/api/live", dependencies=[Depends(require_user)])
 async def live():
-    return {**collector.snapshot(), "history": list(live_history), "recording_interval": recording_interval}
+    async with SessionLocal() as session:
+        rows = (await session.execute(
+            select(GeneratorRun).order_by(GeneratorRun.started_at.desc()).limit(3)
+        )).scalars().all()
+    active = collector.generator_run
+    active_run = None
+    if active:
+        active_run = {
+            "started_at": datetime.fromtimestamp(active["started_at"], timezone.utc).isoformat(),
+            **run_row_values(active),
+        }
+        active_run.pop("updated_at", None)
+    return {**collector.snapshot(), "history": list(live_history), "recording_interval": recording_interval,
+            "generator_runs": {"active_run": active_run,
+                               "recent": [run_payload(row) for row in rows]}}
 
 
 @app.get("/api/devices", dependencies=[Depends(require_user)])

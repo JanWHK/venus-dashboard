@@ -106,3 +106,99 @@ def test_generator_state_power_and_runtime():
     metrics = collector.snapshot()["metrics"]
     assert metrics["generator_state"] == 1
     assert metrics["generator_power"] == 2500
+
+
+def test_electrical_detail_metrics_from_vebus_system_and_charger():
+    collector = LiveCollector()
+    collector.connected = True
+    send(collector, "vebus/275/Ac/Out/L1/V", 230.1)
+    send(collector, "vebus/275/Ac/Out/L1/I", 5.71)
+    send(collector, "vebus/275/Ac/Out/L1/S", 1313)
+    send(collector, "vebus/275/Ac/Out/L1/F", 49.95)
+    send(collector, "vebus/275/State", 9)
+    send(collector, "system/0/Dc/System/Power", 159.3)
+    send(collector, "system/0/Dc/System/Current", 2.98)
+    send(collector, "solarcharger/275/Pv/V", 109.04)
+    send(collector, "solarcharger/275/Dc/0/Current", 21.4)
+    metrics = collector.snapshot()["metrics"]
+    assert metrics["ac_out_voltage"] == 230.1
+    assert metrics["ac_out_current"] == 5.71
+    assert metrics["ac_out_apparent"] == 1313
+    assert metrics["ac_out_frequency"] == 49.95
+    assert metrics["inverter_state"] == 9
+    assert metrics["dc_load_power"] == 159.3
+    assert metrics["dc_load_current"] == 2.98
+    assert metrics["pv_voltage"] == 109.04
+    assert metrics["pv_current"] == 21.4
+
+
+def test_grid_falls_back_to_vebus_active_input_only_when_connected():
+    collector = LiveCollector()
+    collector.connected = True
+    send(collector, "vebus/1/Ac/ActiveIn/ActiveInput", 240)
+    send(collector, "vebus/1/Ac/ActiveIn/L1/P", 0)
+    assert collector.snapshot()["metrics"]["grid_power"] is None
+    send(collector, "vebus/1/Ac/ActiveIn/ActiveInput", 0)
+    send(collector, "vebus/1/Ac/ActiveIn/L1/P", 850)
+    assert collector.snapshot()["metrics"]["grid_power"] == 850
+    send(collector, "system/0/Ac/Grid/L1/Power", -120)
+    assert collector.snapshot()["metrics"]["grid_power"] == -120
+
+
+def seed_at(collector, path, value, at):
+    collector.values[f"system/0/{path}"] = {"value": value, "at": at}
+
+
+def test_generator_run_duration_is_exact_from_timers_counter():
+    collector = LiveCollector()
+    collector.connected = True
+    t0 = 1_000_000.0
+    seed_at(collector, "Timers/TimeOnGenerator", 15434, t0)
+    collector._track_generator(t0 + 1)
+    assert collector.generator_run is None
+    seed_at(collector, "Timers/TimeOnGenerator", 15500, t0 + 61)
+    collector._track_generator(t0 + 61)
+    assert collector.generator_run is not None
+    # Start backdated by the observed counter jump.
+    assert collector.generator_run["started_at"] == t0 + 61 - 66
+    seed_at(collector, "Timers/TimeOnGenerator", 16000, t0 + 400)
+    collector._track_generator(t0 + 400)
+    collector._track_generator(t0 + 900)
+    assert collector.generator_run is None
+    run = collector.generator_runs[-1]
+    assert run["duration_seconds"] == 16000 - 15434
+    assert run["energy_wh"] == 0
+    assert not run["power_seen"]
+
+
+def test_generator_energy_integrates_genset_power():
+    collector = LiveCollector()
+    collector.connected = True
+    t0 = 2_000_000.0
+    seed_at(collector, "Timers/TimeOnGenerator", 100, t0)
+    collector._track_generator(t0)
+    seed_at(collector, "Timers/TimeOnGenerator", 110, t0 + 10)
+    seed_at(collector, "Ac/Genset/L1/Power", 2000, t0 + 10)
+    collector._track_generator(t0 + 10)
+    collector._track_generator(t0 + 70)
+    run = collector.generator_run
+    assert abs(run["energy_wh"] - 2000 * 60 / 3600) < 0.01
+    assert run["peak_w"] == 2000
+    assert run["power_seen"]
+
+
+def test_generator_state_signal_opens_and_closes_run():
+    collector = LiveCollector()
+    collector.connected = True
+    t0 = 3_000_000.0
+    collector.values["generator/0/State"] = {"value": 1, "at": t0}
+    collector._track_generator(t0)
+    assert collector.generator_run is not None
+    assert collector.generator_run["started_at"] == t0
+    collector.values["generator/0/State"] = {"value": 0, "at": t0 + 500}
+    collector._track_generator(t0 + 500)
+    collector._track_generator(t0 + 900)
+    assert collector.generator_run is None
+    drained = collector.drain_generator_runs()
+    assert len(drained) == 1 and drained[0]["duration_seconds"] == 500
+    assert collector.drain_generator_runs() == []

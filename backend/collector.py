@@ -5,6 +5,7 @@ import os
 import ssl
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
 
 import paho.mqtt.client as mqtt
@@ -13,6 +14,10 @@ SERVICES = {"system", "battery", "vebus", "solarcharger", "grid", "genset",
             "inverter", "acload", "tank", "temperature", "charger", "dcgenset",
             "generator"}
 STALE_SECONDS = 90
+# A generator run closes after this long without any "running" signal
+# (Timers/TimeOnGenerator increase, genset state running, or genset power).
+GENERATOR_GRACE_SECONDS = 300
+GENSET_MIN_WATTS = 20
 
 
 class LiveCollector:
@@ -26,6 +31,12 @@ class LiveCollector:
         self.connected = False
         self.error = None
         self.client = None
+        # Generator run tracking. Duration comes from the GX lifetime counter
+        # Timers/TimeOnGenerator, which only advances while the genset runs,
+        # so run length stays exact even when the start is observed late.
+        self.timers_prev = None
+        self.generator_run = None
+        self.generator_runs = deque(maxlen=100)
 
     def start(self):
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, transport=self.transport)
@@ -94,14 +105,100 @@ class LiveCollector:
         except (ValueError, TypeError, KeyError):
             return
         key = "/".join(parts[2:])
+        path = "/".join(parts[3:])
+        track = (path == "Timers/TimeOnGenerator"
+                 or path.startswith("Ac/Genset/")
+                 or (parts[2] == "generator" and path == "State"))
         with self.lock:
             if key not in self.values and len(self.values) >= 6000:
                 return
             self.values[key] = {"value": value, "at": time.time()}
+            if track:
+                self._track_generator(time.time())
+
+    def _track_generator(self, now):
+        """Run-length state machine. Caller must hold the lock."""
+        def numeric(value):
+            return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+        timers = genset_state = None
+        genset_power = 0.0
+        genset_power_seen = False
+        for key, item in self.values.items():
+            parts = key.split("/", 2)
+            if len(parts) < 3:
+                continue
+            service, _instance, path = parts
+            if path == "Timers/TimeOnGenerator" and service == "system":
+                timers = numeric(item["value"]) or timers
+            elif service == "generator" and path == "State":
+                genset_state = item["value"]
+            elif service == "system" and path.startswith("Ac/Genset/L") and path.endswith("/Power"):
+                power = numeric(item["value"])
+                if power is not None:
+                    genset_power += power
+                    genset_power_seen = True
+
+        signal = False
+        if timers is not None:
+            if self.timers_prev is not None and timers > self.timers_prev:
+                if self.generator_run is None:
+                    # Backdate the start by the counter jump we just observed.
+                    self.generator_run = {
+                        "started_at": now - (timers - self.timers_prev),
+                        "duration_base": self.timers_prev,
+                        "last_signal_at": now, "ended_at": None,
+                        "duration_seconds": None, "energy_wh": 0.0,
+                        "peak_w": None, "power_seen": False,
+                        "prev_power": None, "prev_power_at": None,
+                    }
+                self.generator_run["last_signal_at"] = now
+                signal = True
+            self.timers_prev = timers
+        if genset_state in (1, 2, 3) or genset_power > GENSET_MIN_WATTS:
+            signal = True
+            if self.generator_run is None:
+                self.generator_run = {
+                    "started_at": now, "duration_base": None,
+                    "last_signal_at": now, "ended_at": None,
+                    "duration_seconds": None, "energy_wh": 0.0,
+                    "peak_w": None, "power_seen": False,
+                    "prev_power": None, "prev_power_at": None,
+                }
+            self.generator_run["last_signal_at"] = now
+
+        run = self.generator_run
+        if run is not None and genset_power_seen:
+            if run["prev_power"] is not None:
+                elapsed = now - run["prev_power_at"]
+                if 0 < elapsed <= 180:
+                    run["energy_wh"] += run["prev_power"] * elapsed / 3600.0
+            run["prev_power"] = genset_power
+            run["prev_power_at"] = now
+            run["power_seen"] = True
+            run["peak_w"] = max(run["peak_w"] or 0.0, genset_power)
+
+        stopped_now = genset_state is not None and genset_state not in (1, 2, 3)
+        if run is not None and (stopped_now or (not signal and now - run["last_signal_at"] > GENERATOR_GRACE_SECONDS)):
+            if run["duration_base"] is not None and timers is not None:
+                run["duration_seconds"] = max(0.0, timers - run["duration_base"])
+            else:
+                end = now if stopped_now else run["last_signal_at"]
+                run["duration_seconds"] = max(0.0, end - run["started_at"])
+            run["ended_at"] = run["last_signal_at"]
+            self.generator_runs.append(run)
+            self.generator_run = None
+
+    def drain_generator_runs(self):
+        with self.lock:
+            runs = list(self.generator_runs)
+            self.generator_runs.clear()
+            return runs
 
     def snapshot(self, include_devices=False):
         now = time.time()
         with self.lock:
+            self._track_generator(now)
             values = {key: dict(item) for key, item in self.values.items()}
             connected, error = self.connected, self.error
         fresh = {k: v["value"] for k, v in values.items() if connected and now - v["at"] <= STALE_SECONDS}
@@ -130,6 +227,11 @@ class LiveCollector:
         current = fallback(get("system", "Dc/Battery/Current"), get("battery", "Dc/0/Current"))
         solar_parts = [v for v in (fallback(get("system", "Dc/Pv/Power"), solar_sum("Yield/Power")),
                                   phases("Ac/PvOnOutput"), phases("Ac/PvOnGrid"), phases("Ac/PvOnGenset")) if v is not None]
+        # No grid service reports here; grid is seen through the MultiPlus AC
+        # input. ActiveInput 240 means no input is connected — never treat
+        # its idle 0 V readings as grid.
+        active_input = get("vebus", "Ac/ActiveIn/ActiveInput")
+        vebus_grid_power = get("vebus", "Ac/ActiveIn/L1/P") if active_input in (0, 1) else None
         metrics = {
             "solar_power": sum(solar_parts) if solar_parts else None,
             "battery_soc": fallback(get("system", "Dc/Battery/Soc"), get("battery", "Soc")),
@@ -137,11 +239,22 @@ class LiveCollector:
             "battery_power": fallback(get("system", "Dc/Battery/Power"), get("battery", "Dc/0/Power"),
                                       voltage * current if voltage is not None and current is not None else None),
             "battery_temperature": get("battery", "Dc/0/Temperature"),
-            "grid_power": phases("Ac/Grid"), "load_power": phases("Ac/Consumption"),
+            "grid_power": fallback(phases("Ac/Grid"), vebus_grid_power),
+            "load_power": phases("Ac/Consumption"),
             "solar_yield_today": solar_sum("History/Daily/0/Yield"),
             "grid_voltage": get("grid", "Ac/L1/Voltage"),
             "ac_out_voltage": get("vebus", "Ac/Out/L1/V"),
+            "ac_out_current": get("vebus", "Ac/Out/L1/I"),
+            "ac_out_apparent": get("vebus", "Ac/Out/L1/S"),
             "ac_out_frequency": get("vebus", "Ac/Out/L1/F"),
+            "ac_in_voltage": get("vebus", "Ac/ActiveIn/L1/V"),
+            "ac_in_current": get("vebus", "Ac/ActiveIn/L1/I"),
+            "ac_in_frequency": get("vebus", "Ac/ActiveIn/L1/F"),
+            "dc_load_power": get("system", "Dc/System/Power"),
+            "dc_load_current": get("system", "Dc/System/Current"),
+            "pv_voltage": get("solarcharger", "Pv/V"),
+            "pv_current": solar_sum("Dc/0/Current"),
+            "inverter_state": get("vebus", "State"),
             "system_state": get("system", "SystemState/State"),
             "battery_time_to_go": get("system", "Dc/Battery/TimeToGo"),
             "generator_state": get("generator", "State"),

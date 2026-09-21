@@ -55,6 +55,19 @@ class EnergySample(Base):
     generator_power = Column(Float)
 
 
+class GeneratorRun(Base):
+    __tablename__ = "generator_runs"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    started_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    # NULL while the run is still in progress.
+    ended_at = Column(DateTime(timezone=True))
+    duration_seconds = Column(Float)
+    energy_kwh = Column(Float)
+    peak_power_w = Column(Float)
+    updated_at = Column(DateTime(timezone=True), nullable=False,
+                        server_default=text("NOW()"))
+
+
 class Setting(Base):
     __tablename__ = "settings"
     id = Column(Integer, primary_key=True)
