@@ -765,7 +765,7 @@ export default function Dashboard({ demo, historyOnly = false }) {
         <>
           <div className="metric-grid five">
             <MetricCard
-              icon="sun"
+              icon={m.solar_power ? "sun" : "moon"}
               title="Solar generation"
               value={m.solar_power}
               detail={
