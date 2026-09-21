@@ -1,6 +1,6 @@
 # Helio
 
-A private, live-first dashboard for a Victron GX system. The interface includes an animated energy flow (with generator node), a five-metric overview row, battery gauge, live chart with stored 24h/7d history, VRM-level electrical detail (volts, amps, hertz, DC loads, PV volts, inverter state), a persisted generator run log, searchable device telemetry, multi-user accounts with an admin People manager, light/dark theming, and a login page.
+A private, live-first dashboard for a Victron GX system. The interface includes an animated energy flow (with generator node), a five-metric overview row, a live generator-input split panel (total in = AC loads + DC loads + battery charging), battery gauge, live chart with stored 24h/7d history, VRM-level electrical detail (volts, amps, hertz, DC loads, PV volts, inverter state), a persisted generator run log, searchable device telemetry, multi-user accounts with an admin People manager, light/dark theming, and a login page.
 
 ## Run locally
 
@@ -28,7 +28,7 @@ Configure through `.env` (copy `.env.example`):
 
 The collector subscribes to `N/<portal>/<service>/#` for system, battery, VE.Bus, solar charger, grid, generator (start/stop), genset, inverter, AC load, tank, temperature, charger and DC generator services. A keepalive is published every ~30 seconds and on reconnect to request telemetry bursts. It never sends control writes. Missing or stale values display a dash, never a fabricated zero. Device details include the original metric paths and identify stale readings.
 
-Known data gaps on the current installation: no `grid` service exists (grid flows through the MultiPlus) and no genset device reports state/power. The dashboard bridges both honestly: `grid_power` falls back to the MultiPlus AC-in reading whenever an input is actually connected (`Ac/ActiveIn/ActiveInput` 0/1), and generator runs are recorded from the GX lifetime counter `Timers/TimeOnGenerator` — each session lands in the `generator_runs` table with its exact duration, while kWh and peak kW appear automatically once genset power telemetry exists. Anything still unknown displays as a dash rather than an invented number.
+Known data quirks on the current installation: no `grid` service exists (grid flows through the MultiPlus) and there is no `generator` service either — but the genset itself is wired to the MultiPlus AC input 0 and reports `system/0/Ac/Genset/L1/Power` while running. Because the input slot does not identify the source, the collector treats the input as generator whenever reported genset power exceeds 20 W and suppresses the grid fallback while it feeds; runs are recorded from the GX lifetime counter `Timers/TimeOnGenerator`, and kWh/peak W integrate from the genset power. While the generator runs, a dedicated panel splits its input into AC loads, DC loads (GX `Dc/System/Power`) and battery charging, with charging as the exact remainder. Anything still unknown displays as a dash rather than an invented number.
 
 ## Battery alerts
 

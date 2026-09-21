@@ -11,8 +11,9 @@ GX's MQTT broker (read-only) and serves a React dashboard. Replaced an older Exc
 logger (`venus_logger.py`, `battery_log.xlsx` — legacy, broken, see OPEN_ISSUES.md).
 
 **Current state: working locally and in production.** Live GX telemetry, 15-minute
-history recording, multi-user accounts (admin + viewers), generator card/series (data
-pending a physical genset), light/dark theming. The earlier dashboard work is merged
+history recording, multi-user accounts (admin + viewers), a live generator: the genset
+wired to MultiPlus AC input 0, reporting power while it runs, with a Generator input
+split panel and persisted run log, light/dark theming. The earlier dashboard work is merged
 to `main`. Battery alerts are documented in `ALERTS.md`; release procedure and
 verification are in `DEPLOYMENT.md`.
 
@@ -49,9 +50,10 @@ docker compose logs -f venus-backend
 - Services subscribed: `system, battery, vebus, solarcharger, grid, genset, inverter,
   acload, tank, temperature, charger, dcgenset, generator` — `N/<portal>/<service>/#`.
 - Reporting devices right now: `system/0`, `vebus/275`, `solarcharger/275`,
-  `battery/512`. **No `grid` service and no `generator` topics** — the UI deliberately
-  shows dashes/"Not reported" instead of fabricating values (see OPEN_ISSUES.md for the
-  two data-gap options: vebus AC-in grid fallback, or wait for a genset).
+  `battery/512`. **No `grid` and no `generator` service** — but the genset itself
+  reports `system/0/Ac/Genset/*` power while running (see the 2026-09-22 addendum).
+  The UI deliberately shows dashes/"Not reported" for anything truly absent instead of
+  fabricating values (see OPEN_ISSUES.md).
 - Keepalive `R/<portal>/keepalive` every ~30 s keeps telemetry flowing. Never publish
   `W/` control topics.
 
@@ -106,6 +108,44 @@ Done since this handoff was written (2026-09-21):
 - Electrical detail on the dashboard: AC out V/A/Hz, DC loads, PV volts, inverter
   state, AC-in fallback for the grid card.
 - Generator flow node moved into the energy-source column with the solar/grid cards.
+
+## Addendum — 2026-09-22 (generator went live; read this after the sections above)
+
+The genset ran for real on 2026-09-21, which invalidated several "no genset yet"
+assumptions in the older sections and produced six deployed commits:
+
+- `ebff508` — **source-detection fix:** the genset is wired to AC input **0** (the slot
+  configured as "grid"), so slot number ≠ source identity. The collector now marks the
+  input as generator whenever `system/0/Ac/Genset/*` power exceeds
+  `GENSET_MIN_WATTS = 20` (`backend/collector.py`), and `grid_power` stays null while
+  it feeds. Unit test `test_live_genset_power_marks_input_as_generator_even_on_grid_slot`.
+- `8ba193d` — **Generator input panel, DC line:** Total in = AC loads + DC loads (GX
+  `Dc/System/Power`) + battery charging; charging is the computed remainder so the
+  identity is exact. Third bar segment is amber `#b5803a` light / `#b9853f` dark,
+  validated with the dataviz palette script in both modes.
+- `4016584` / `41edeec` — genset **V · Hz** (`Ac/ActiveIn/L1/V` + `/F`) on the panel
+  heading and on the flow diagram's generator node caption while it feeds.
+- `ea53f92` / `3db65be` — solar card and flow solar node switch **sun → moon** when
+  `solar_power` is 0/null.
+- `1f52fad` (earlier the same day) — the Generator input panel itself.
+
+All six were deployed to production via the deploy skill with all 7 checks green, and
+each verified by asset-hash comparison on the host (`Dashboard-*.js` grep).
+
+Physics notes for the next agent (verified against live GX data):
+`Ac/Consumption/L1/Power` ≡ vebus `Ac/Out/L1/P` exactly; `Dc/System/Power` is a noisy
+GX aggregate (swings a few hundred W — the DC tile will wobble); genset output itself
+swings ~500 W between 15 s samples; AC-in ≈ AC loads + battery net + DC + 4–6 %
+inverter losses. The panel identity holds by construction because charging is the
+remainder.
+
+Verification gaps to close (also in OPEN_ISSUES.md):
+
+- **UI screenshots**: the T3 preview automation host was down all session; the panel
+  and icons were verified by build + demo arithmetic + code review only. Run the
+  Playwright suite and eyeball both themes when a browser is available.
+- **Local dev login** `jan` / `helio-dev-2026` was rejected (dev DB likely recreated);
+  re-create via the setup key if you need the local stack interactively.
 
 ## Credentials policy
 

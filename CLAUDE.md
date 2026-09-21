@@ -6,7 +6,7 @@
 - **GitHub:** `JanWHK/venus-dashboard`
 - **Stack:** FastAPI + SQLAlchemy/asyncpg + Paho MQTT + React 18 + Recharts + PostgreSQL 15
 - **Auth:** first-use setup key (printed in backend log on an empty DB) creates the owner/admin; admins can add viewer accounts under Settings → People
-- **Test account (local dev only):** `jan` / `helio-dev-2026`; viewer `household` / `view-only-pass-1`
+- **Test account (local dev only):** `jan` / `helio-dev-2026`; viewer `household` / `view-only-pass-1`. If login is rejected, the dev DB volume was likely recreated — re-create via the setup key in the backend log.
 
 ### Production env vars (`/opt/labwhk/apps/venus/.env` on labwhk, root-owned)
 `DATABASE_URL` and `SYNC_DATABASE_URL` use `%40` for `@` in the password (URL encoding required).
@@ -27,22 +27,32 @@ If Postgres auth fails after redeployment, exec into `venus-db` and run:
 - **Credentials:** stored in `.env` (git-ignored) as `MQTT_USERNAME`/`MQTT_PASSWORD`. Never commit them.
 - **Keepalive:** publish to `R/c0619ab43e45/keepalive` to trigger telemetry bursts.
 
-## MQTT Services Actually Reporting (verified 2026-09-21)
+## MQTT Services Actually Reporting (verified 2026-09-21/22)
 | Device | Instance | Notes |
 |---|---|---|
-| system | `0` | aggregates, `Ac/Genset/*` placeholders (all null), `Timers/TimeOnGenerator` |
+| system | `0` | aggregates; `Ac/Genset/L1/Power` populates **while the genset runs**; `Timers/TimeOnGenerator` |
 | vebus (MultiPlus-II 48/5000/70) | `275` | AC out; AC-in lives under `Ac/ActiveIn/*` |
 | solarcharger (SmartSolar MPPT 250/70 rev3) | `275` | VRM labels it MPPT-274/275; instance is 275 |
 | battery (DYNESS-L) | `512` | SoC, voltage, current, temperature |
 
-- **No `grid` service** — grid flows through the MultiPlus. `grid_power` falls back to
-  vebus `Ac/ActiveIn/L1/P` when `Ac/ActiveIn/ActiveInput` is 0 or 1 (an input is really
-  connected); today it is 240 (none connected), so the card stays empty by design.
-- **No `generator` service topics** — start/stop is configured (4.3 h lifetime runtime in
-  `Timers/TimeOnGenerator`) but no genset reports state/power yet. Runs are still
-  recorded: the backend opens a `generator_runs` session whenever the Timers counter
-  advances (exact duration; kWh/peak W appear automatically once `Ac/Genset/*` power
-  starts reporting). UI shows "Not reported by GX" plus the last run.
+- **No `grid` service** — grid flows through the MultiPlus. **The genset is wired to
+  AC input 0** (the slot configured as "grid"), so the input slot does not identify the
+  source: the collector marks the input as generator whenever genset power exceeds
+  `GENSET_MIN_WATTS` (20 W) and only then falls back to the slot role (0 = grid,
+  1 = generator). `grid_power` is deliberately null while the generator feeds.
+  When the genset is off, `ActiveInput` is 240 (nothing connected) and the grid card
+  stays empty by design.
+- **No `generator` service** (no `generator/0/State`) — runs are detected by reported
+  genset power and the `Timers/TimeOnGenerator` counter; each run lands in
+  `generator_runs` with exact duration, kWh and peak W (power telemetry works since
+  2026-09-21). While the generator feeds, the UI shows a **Generator input** panel:
+  total in = AC loads + DC loads (GX) + battery charging, where charging is the
+  remainder so the identity is exact.
+- `system/0/Ac/Consumption/L1/Power` ≡ vebus `Ac/Out/L1/P` (Home consumption = AC out).
+  `Dc/System/Power` is a noisy GX DC aggregate (swings a few hundred W) — it feeds the
+  panel's DC-loads line, so expect the tile to wobble.
+- Genset output is not instantaneous either (swings ~500 W between 15 s samples); the
+  AC-in ≈ loads + battery + DC + inverter-losses identity holds to ~4–6 %.
 
 ## Legacy logger (superseded — see OPEN_ISSUES.md)
 `venus_logger.py` / `venus_discover.py` / `battery_log.xlsx` are the original Excel
