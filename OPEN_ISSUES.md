@@ -32,14 +32,15 @@
 - **Action:** delete the crontab entry (recommended) or revive the logger per SETUP.md.
 
 ### Production deploy lacks MQTT settings
-- **Update 2026-09-21:** production (https://victron.afrinam.com) returns **502** and the
-  Dokploy host (`100.111.222.14:8000`) is unreachable — not present on the tailnet and
-  100% packet loss. The host must come back (or be rebuilt) before any deploy; the
-  merged `main` (32a67cc) will build cleanly once it is.
-- Dokploy needs `VENUS_PORT=8883`, `MQTT_TLS=true`, `MQTT_TLS_INSECURE=true`,
-  `MQTT_USERNAME`, `MQTT_PASSWORD` (same values as local `.env`), and network reachability
-  from the Dokploy host to `192.168.21.10` — which is only routable from VLAN 21/LAN.
-  Running the production stack off-site will not reach the GX.
+- **Resolved 2026-09-21:** production runs on `labwhk` (LAN `192.168.100.104`) as compose
+  project `venus` under `/opt/labwhk/apps/venus`, fronted by Dokploy's Traefik. The
+  earlier "Dokploy host 100.111.222.14 unreachable" trail was a stale address. Deployed
+  `main` (4f3dfb4) with the corrected GX/MQTT env block; all verification green, MQTT
+  connected to the GX. Deploy via `.claude/skills/deploying-to-production` — the Dokploy
+  UI/API is not involved.
+- Historical requirements that still apply: the MQTT block must stay in the server's
+  `.env` (GX broker rejects anonymous connections) and the host needs its route to
+  `192.168.21.10:8883` (currently working).
 
 ### VLAN 21 routed access & cleanup (from NETWORK_HANDOFF.md)
 - `tenda-recovery-vlan21` temporary NetworkManager interface is **still active** on this

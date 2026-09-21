@@ -2,19 +2,18 @@
 
 ## Web Dashboard (Helio)
 - **Local:** http://localhost:8081 (`docker compose up -d --build` — project name `victron-helio` is pinned in `.env` via `COMPOSE_PROJECT_NAME`)
-- **Production:** https://victron.afrinam.com (Dokploy, `docker-compose.prod.yml`)
+- **Production:** https://victron.afrinam.com — plain compose stack (`-p venus`) at `/opt/labwhk/apps/venus` on `labwhk` (LAN `192.168.100.104`, SSH user `janj`), served by Dokploy's Traefik. **Deploy with `.claude/skills/deploying-to-production`** — merging to main does not ship.
 - **GitHub:** `JanWHK/venus-dashboard`
 - **Stack:** FastAPI + SQLAlchemy/asyncpg + Paho MQTT + React 18 + Recharts + PostgreSQL 15
-- **Auth:** first-use setup key (printed in backend log) creates the owner/admin; admins can add viewer accounts under Settings → People
+- **Auth:** first-use setup key (printed in backend log on an empty DB) creates the owner/admin; admins can add viewer accounts under Settings → People
 - **Test account (local dev only):** `jan` / `helio-dev-2026`; viewer `household` / `view-only-pass-1`
-- **Dokploy admin:** http://100.111.222.14:8000 (Tailscale)
 
-### Production env vars (set in Dokploy UI)
+### Production env vars (`/opt/labwhk/apps/venus/.env` on labwhk, root-owned)
 `DATABASE_URL` and `SYNC_DATABASE_URL` use `%40` for `@` in the password (URL encoding required).
-Production also needs the MQTT block from `.env.example` (`VENUS_PORT`, `MQTT_TLS`, `MQTT_TLS_INSECURE`, `MQTT_USERNAME`, `MQTT_PASSWORD`) — the GX broker rejects anonymous connections.
+The MQTT block (`VENUS_HOST=192.168.21.10`, `VENUS_PORT=8883`, `MQTT_TRANSPORT=tcp`, `MQTT_TLS=true`, `MQTT_TLS_INSECURE=true`, `MQTT_USERNAME`, `MQTT_PASSWORD`) matches local `.env` — the GX broker rejects anonymous connections.
 If Postgres auth fails after redeployment, exec into `venus-db` and run:
 `psql -U venus -d venus -c "ALTER ROLE venus WITH PASSWORD 'newpassword';"`
-(The `venus-db-data` named volume keeps the password from first init — changing the env var alone doesn't update it.)
+(The `venus_venus-db-data` named volume keeps the password from first init — changing the env var alone doesn't update it.)
 
 ## Device
 - **URL:** http://192.168.21.10/gui-v1 (noVNC console) / http://192.168.21.10/gui-v2 (Qt WebAssembly UI)
