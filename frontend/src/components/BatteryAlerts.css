@@ -1,0 +1,24 @@
+.battery-alerts {
+  border: 1px solid var(--line-strong);
+  border-left: 5px solid var(--green);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 18px 20px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.battery-alerts.advisory { border-left-color: var(--gold-deep); }
+.battery-alerts.warning { border-left-color: #d67a20; border-left-width: 8px; }
+.battery-alerts.critical { border: 2px solid var(--danger); border-left-width: 10px; }
+.battery-alerts.critical strong { color: var(--danger); }
+.battery-alert-summary { display: flex; gap: 16px; justify-content: space-between; align-items: center; }
+.battery-alerts p { margin: 8px 0; line-height: 1.6; }
+.battery-alert-actions { display: flex; flex-wrap: wrap; gap: 12px; flex-shrink: 0; }
+.battery-alerts summary { cursor: pointer; margin-top: 12px; }
+.battery-alerts ul { padding: 0; list-style: none; }
+.battery-alerts li { display: grid; gap: 5px; padding: 12px 0; border-top: 1px solid var(--line); }
+@media (max-width: 900px) {
+  .battery-alert-summary { align-items: flex-start; flex-direction: column; }
+  .battery-alert-actions { flex-shrink: 1; }
+}

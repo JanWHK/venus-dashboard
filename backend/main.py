@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 
 from auth import initialize_auth, require_admin, require_csrf_header, require_user, router as auth_router
 from collector import collector
+import alerts
 from database import DashboardSetting, EnergySample, GeneratorRun, SessionLocal, engine, init_db
 
 VALID_INTERVALS = [0, 300, 600, 900, 1800, 3600]
@@ -84,6 +85,10 @@ async def run_telemetry():
         if tick % 3 == 0:
             collector.keepalive()
         tick += 1
+        try:
+            await alerts.evaluate(snapshot)
+        except Exception:
+            logging.getLogger("uvicorn.error").exception("Could not evaluate battery alerts")
         now = time.monotonic()
         if recording_interval and now - last_saved >= recording_interval:
             last_saved = now
@@ -113,19 +118,26 @@ async def lifespan(app: FastAPI):
         setting = await session.get(DashboardSetting, 1)
         recording_interval = setting.interval_seconds if setting else 900
     collector.start()
+    alerts.candidates.clear()
+    alerts.last_check = None
     task = asyncio.create_task(run_telemetry())
+    notification_task = asyncio.create_task(alerts.delivery_loop())
     try:
         yield
     finally:
         task.cancel()
+        notification_task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+        with suppress(asyncio.CancelledError):
+            await notification_task
         await asyncio.to_thread(collector.stop)
         await engine.dispose()
 
 
 app = FastAPI(title="Helio", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(auth_router)
+app.include_router(alerts.router)
 
 
 @app.middleware("http")

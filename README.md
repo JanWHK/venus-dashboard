@@ -30,6 +30,15 @@ The collector subscribes to `N/<portal>/<service>/#` for system, battery, VE.Bus
 
 Known data gaps on the current installation: no `grid` service exists (grid flows through the MultiPlus) and no genset device reports state/power. The dashboard bridges both honestly: `grid_power` falls back to the MultiPlus AC-in reading whenever an input is actually connected (`Ac/ActiveIn/ActiveInput` 0/1), and generator runs are recorded from the GX lifetime counter `Timers/TimeOnGenerator` — each session lands in the `generator_runs` table with its exact duration, while kWh and peak kW appear automatically once genset power telemetry exists. Anything still unknown displays as a dash rather than an invented number.
 
+## Battery alerts
+
+The app monitors 50%, 25%, and 15% battery charge thresholds, with progressively
+stronger banners and opt-in sound. Telegram is primary; SMTP email is the fallback.
+Alerts use confirmation delays, recovery hysteresis, persistent deduplication, and
+administrator acknowledgement. Critical alerts repeat until acknowledged or recovered.
+Detailed telemetry is not recorded by this feature. See [ALERTS.md](ALERTS.md) for
+configuration, limitations, and testing. See [DEPLOYMENT.md](DEPLOYMENT.md) for production releases.
+
 ## Accounts
 
 - The owner (first account) is admin: manages users under Settings → People, changes recording settings, resets or removes other accounts.
