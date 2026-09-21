@@ -32,6 +32,10 @@
 - **Action:** delete the crontab entry (recommended) or revive the logger per SETUP.md.
 
 ### Production deploy lacks MQTT settings
+- **Update 2026-09-21:** production (https://victron.afrinam.com) returns **502** and the
+  Dokploy host (`100.111.222.14:8000`) is unreachable — not present on the tailnet and
+  100% packet loss. The host must come back (or be rebuilt) before any deploy; the
+  merged `main` (32a67cc) will build cleanly once it is.
 - Dokploy needs `VENUS_PORT=8883`, `MQTT_TLS=true`, `MQTT_TLS_INSECURE=true`,
   `MQTT_USERNAME`, `MQTT_PASSWORD` (same values as local `.env`), and network reachability
   from the Dokploy host to `192.168.21.10` — which is only routable from VLAN 21/LAN.
