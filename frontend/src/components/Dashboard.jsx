@@ -478,6 +478,13 @@ function GeneratorPanel({ metrics: m, activeRun }) {
           title={`To battery charging: ${formatPower(charging, unit)} ${unit}`}
         />
       </div>
+      <div className="split-labels" aria-hidden="true">
+        {loadsShare != null && <span style={{ width: `${loadsShare}%` }}>{Math.round(loadsShare)}%</span>}
+        {dcShare != null && <span style={{ width: `${dcShare}%` }}>{Math.round(dcShare)}%</span>}
+        <span style={{ flexGrow: 1 }}>
+          {Math.max(0, 100 - (loadsShare != null ? Math.round(loadsShare) : 0) - (dcShare != null ? Math.round(dcShare) : 0))}%
+        </span>
+      </div>
     </section>
   );
 }
