@@ -405,6 +405,11 @@ function GeneratorPanel({ metrics: m, activeRun }) {
         <div>
           <span className="eyebrow">GENSET RUNNING</span>
           <h2>Generator input.</h2>
+          {(m.ac_in_voltage != null || m.ac_in_frequency != null) && (
+            <span className="gen-supply">
+              {number(m.ac_in_voltage)} V · {number(m.ac_in_frequency)} Hz
+            </span>
+          )}
         </div>
         <span className="status-pill is-live">
           <span className="pulse-dot" />
