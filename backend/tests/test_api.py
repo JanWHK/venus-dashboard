@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 import auth
 import main
-from database import Account, DashboardSetting, EnergySample, LoginSession, sync_engine
+from database import Account, DashboardSetting, EnergySample, LoginSession, BatteryAlert, BatteryAlertRule, sync_engine
 
 HEADERS = {"X-Helio-Request": "1"}
 CREDENTIALS = {"username": "owner", "password": "test-only-long-password"}
@@ -31,11 +31,16 @@ CREDENTIALS = {"username": "owner", "password": "test-only-long-password"}
 def client():
     auth.attempts.clear()
     main.live_history.clear()
-    with patch.object(main.collector, "start"), patch.object(main.collector, "stop"):
+    async def idle():
+        import asyncio
+        await asyncio.Event().wait()
+    # Tests drive the evaluator explicitly; never send real notifications.
+    with patch.object(main.collector, "start"), patch.object(main.collector, "stop"), \
+            patch.object(main, "run_telemetry", idle), patch.object(main.alerts, "delivery_loop", idle):
         with TestClient(main.app) as client:
             # This code is gated above to the explicitly supplied disposable test database.
             with Session(sync_engine) as session:
-                for table in [LoginSession, Account, DashboardSetting, EnergySample]:
+                for table in [LoginSession, Account, DashboardSetting, EnergySample, BatteryAlert, BatteryAlertRule]:
                     session.execute(delete(table))
                 session.commit()
             auth.setup_token = os.environ["DASHBOARD_SETUP_TOKEN"]
@@ -50,10 +55,11 @@ def create_owner(client):
 
 
 def test_all_telemetry_endpoints_require_authentication(client):
-    for path in ["/api/live", "/api/devices", "/api/settings", "/api/readings", "/api/auth/me"]:
+    for path in ["/api/live", "/api/devices", "/api/settings", "/api/readings", "/api/auth/me", "/api/alerts"]:
         assert client.get(path).status_code == 401
     assert client.put("/api/settings", json={"interval_seconds": 300}, headers=HEADERS).status_code == 401
     assert client.get("/api/health").status_code == 200
+    assert client.post("/api/alerts/1/acknowledge", headers=HEADERS).status_code == 401
 
 
 def test_setup_requires_key_and_strong_password_and_cannot_repeat(client):

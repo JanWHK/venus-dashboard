@@ -10,11 +10,11 @@ A private dashboard ("Helio") for a Victron Venus GX. FastAPI backend subscribes
 GX's MQTT broker (read-only) and serves a React dashboard. Replaced an older Excel
 logger (`venus_logger.py`, `battery_log.xlsx` — legacy, broken, see OPEN_ISSUES.md).
 
-**Current state: fully working on the local stack.** Live GX telemetry, 15-minute
+**Current state: working locally and in production.** Live GX telemetry, 15-minute
 history recording, multi-user accounts (admin + viewers), generator card/series (data
-pending a physical genset), light/dark theming. All on branch
-`feature/solar-mppt-mobile-responsive`, committed through `f2ac015`. Nothing is pushed
-or merged to `main` yet; no PR exists.
+pending a physical genset), light/dark theming. The earlier dashboard work is merged
+to `main`. Battery alerts are documented in `ALERTS.md`; release procedure and
+verification are in `DEPLOYMENT.md`.
 
 ## Running it
 
@@ -24,7 +24,8 @@ docker compose logs -f venus-backend
 ```
 
 - Dashboard: http://localhost:8081 (loopback only).
-- Local dev login: `jan` / `helio-dev-2026` (owner); viewer: `household` / `view-only-pass-1`.
+- Use an existing private account or the first-use setup flow. Do not put passwords in handoffs.
+- Production: https://victron.afrinam.com, Compose project `venus` on `labwhk`.
 - A second, older test stack (`victron-helio-browser-*` on port 8082, plain docker run,
   DB `helio_test`) has **no MQTT config** — it can never show live data. It exists for
   Playwright integration runs; consider removing it if unused.
@@ -69,6 +70,11 @@ docker compose logs -f venus-backend
 
 ## Where things stand
 
+Battery alerts added after this handoff: see **[ALERTS.md](ALERTS.md)** for policy,
+private credential setup, tests, and remaining operator checklist. Thresholds are
+50%, 25%, and 15%; app sound is opt-in, Telegram is primary, email is fallback.
+Real message delivery still requires configured credentials and recipient testing.
+
 Done and committed:
 
 - Helio app: live MQTT telemetry (TLS 8883 + auth), energy flow, battery gauge,
@@ -85,8 +91,9 @@ Not done (check OPEN_ISSUES.md for detail):
 
 - Grid power still has no live source on this install (AC-in disconnected, no meter);
   the MultiPlus AC-in fallback is implemented and fills the card once an input is live.
-- Production (Dokploy) not redeployed with the MQTT env block; also needs network
-  reachability to the GX from wherever Dokploy runs.
+- Telegram and email require private credentials and actual recipient verification.
+  Production MQTT connectivity was verified on 2026-09-21; deploy via `DEPLOYMENT.md`,
+  not the Dokploy UI.
 - Legacy cron still failing every 10 min — recommend deleting the crontab line.
 - VLAN 21 handoff checklist steps 2–5 (routed-access verification, temp-profile
   cleanup, security follow-ups) — `tenda-recovery-vlan21` is still active and may be
@@ -104,7 +111,7 @@ Done since this handoff was written (2026-09-21):
 
 - GX MQTT username/password live in `.env` (git-ignored) and nowhere else. Never commit
   them, never put them in docs, logs or screenshots. `.env.example` documents the shape.
-- Local dev app passwords (jan/household) are disposable — the DB is a Compose volume.
+- Keep even disposable development account passwords out of new documentation.
 - The GX web login (`remoteconsole` + password from the operator) is separate from MQTT
   credentials and was never available to agents.
 

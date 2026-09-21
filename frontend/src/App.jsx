@@ -10,6 +10,7 @@ import {
 import { api } from "./api";
 import Login from "./components/Login";
 import Icon, { Brand } from "./components/Icon";
+import BatteryAlerts from "./components/BatteryAlerts";
 
 const Dashboard = lazy(() => import("./components/Dashboard"));
 const Devices = lazy(() => import("./components/Devices"));
@@ -164,6 +165,7 @@ function Workspace() {
           </div>
         </header>
         <main>
+          {!demo && <BatteryAlerts user={user} />}
           <Suspense
             fallback={
               <div className="empty-state">Opening your energy view…</div>

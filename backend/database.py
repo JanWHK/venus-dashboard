@@ -3,7 +3,7 @@ import datetime
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
-from sqlalchemy import Column, BigInteger, Integer, Float, DateTime, String, text
+from sqlalchemy import Column, BigInteger, Integer, Float, DateTime, String, Boolean, text
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 SYNC_DATABASE_URL = os.environ.get(
@@ -53,6 +53,28 @@ class EnergySample(Base):
     battery_power = Column(Float)
     battery_soc = Column(Float)
     generator_power = Column(Float)
+
+
+class BatteryAlertRule(Base):
+    __tablename__ = "battery_alert_rules"
+    threshold = Column(Integer, primary_key=True)
+    armed = Column(Boolean, nullable=False, default=True)
+
+
+class BatteryAlert(Base):
+    __tablename__ = "battery_alerts"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    threshold = Column(Integer, nullable=False)
+    soc = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    resolved_at = Column(DateTime(timezone=True))
+    acknowledged_at = Column(DateTime(timezone=True))
+    last_notice_at = Column(DateTime(timezone=True), nullable=False)
+    next_attempt_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    telegram = Column(String(24), nullable=False, default="pending")
+    email = Column(String(24), nullable=False, default="standby")
+    delivery = Column(String(24), nullable=False, default="pending")
 
 
 class GeneratorRun(Base):

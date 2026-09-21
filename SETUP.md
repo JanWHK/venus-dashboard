@@ -50,12 +50,17 @@ account exists. That account is admin; invite viewers under **Settings → Peopl
 - Recording defaults to a 15-minute summary; adjust in Settings. The 24h/7d charts
   fill as samples accumulate in `energy_samples`.
 
-### Production (Dokploy)
+### Production (plain Compose behind Dokploy Traefik)
 
-Set the same MQTT variables plus `DATABASE_URL`/`SYNC_DATABASE_URL` in the Dokploy UI
-(remember `%40` encoding for `@` in the DB password). Cookies switch to Secure
-automatically via `COOKIE_SECURE=true`. The backend must be able to reach the GX
-network from wherever Dokploy runs the stack.
+Production lives at `/opt/labwhk/apps/venus` on `labwhk` (`192.168.100.104`),
+Compose project `venus`. Its private `.env` holds the same MQTT variables plus
+`DATABASE_URL`/`SYNC_DATABASE_URL` (encode `@` in passwords as `%40`). Production
+forces Secure cookies. The backend must reach `192.168.21.10:8883`.
+Dokploy provides Traefik routing only; its UI does not deploy this stack.
+Read [DEPLOYMENT.md](DEPLOYMENT.md) before deploying.
+
+Battery notifications use Telegram with SMTP email fallback. See
+[ALERTS.md](ALERTS.md) for credentials, thresholds, sound, and delivery testing.
 
 ---
 
