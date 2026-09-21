@@ -232,6 +232,12 @@ class LiveCollector:
         # its idle 0 V readings as grid.
         active_input = get("vebus", "Ac/ActiveIn/ActiveInput")
         vebus_ac_in_power = get("vebus", "Ac/ActiveIn/L1/P") if active_input in (0, 1) else None
+        genset_power = phases("Ac/Genset")
+        # The genset can be wired to either MultiPlus AC input, so the input
+        # slot alone doesn't identify the source. Live genset power wins;
+        # otherwise fall back to the input's configured role (0 = grid, 1 = generator).
+        ac_in_source = ("generator" if genset_power is not None and genset_power > GENSET_MIN_WATTS
+                        else {0: "grid", 1: "generator"}.get(active_input))
         metrics = {
             "solar_power": sum(solar_parts) if solar_parts else None,
             "battery_soc": fallback(get("system", "Dc/Battery/Soc"), get("battery", "Soc")),
@@ -239,10 +245,11 @@ class LiveCollector:
             "battery_power": fallback(get("system", "Dc/Battery/Power"), get("battery", "Dc/0/Power"),
                                       voltage * current if voltage is not None and current is not None else None),
             "battery_temperature": get("battery", "Dc/0/Temperature"),
-            "grid_power": fallback(phases("Ac/Grid"), vebus_ac_in_power),
+            "grid_power": fallback(phases("Ac/Grid"),
+                                   None if ac_in_source == "generator" else vebus_ac_in_power),
             "load_power": phases("Ac/Consumption"),
             "ac_in_power": vebus_ac_in_power,
-            "ac_in_source": {0: "grid", 1: "generator"}.get(active_input),
+            "ac_in_source": ac_in_source,
             "solar_yield_today": solar_sum("History/Daily/0/Yield"),
             "grid_voltage": get("grid", "Ac/L1/Voltage"),
             "ac_out_voltage": get("vebus", "Ac/Out/L1/V"),
@@ -260,7 +267,7 @@ class LiveCollector:
             "system_state": get("system", "SystemState/State"),
             "battery_time_to_go": get("system", "Dc/Battery/TimeToGo"),
             "generator_state": get("generator", "State"),
-            "generator_power": phases("Ac/Genset"),
+            "generator_power": genset_power,
             "generator_runtime": get("system", "Timers/TimeOnGenerator"),
         }
         last = max((v["at"] for v in values.values()), default=None)

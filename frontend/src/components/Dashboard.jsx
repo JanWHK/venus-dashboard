@@ -243,7 +243,7 @@ function Flow({ metrics: m, live }) {
             <Icon name="grid" size={24} />
           </span>
           <div>
-            <span>Grid connection</span>
+            <span>{m.ac_in_source === "generator" ? "AC input" : "Grid connection"}</span>
             <strong>
               {formatPower(m.grid_power, unit)} <small>{unit}</small>
             </strong>
@@ -766,19 +766,27 @@ export default function Dashboard({ demo, historyOnly = false }) {
             />
             <MetricCard
               icon="grid"
-              title="Grid exchange"
+              title={m.ac_in_source === "generator" ? "AC input" : "Grid exchange"}
               value={m.grid_power}
               detail={
-                m.grid_power == null
-                  ? "Awaiting grid readings"
-                  : m.grid_power < -20
-                    ? "Exporting energy"
-                    : m.grid_power > 20
-                      ? "Importing energy"
-                      : "No power exchanged"
+                m.ac_in_source === "generator"
+                  ? "Fed by the generator"
+                  : m.grid_power == null
+                    ? "Awaiting grid readings"
+                    : m.grid_power < -20
+                      ? "Exporting energy"
+                      : m.grid_power > 20
+                        ? "Importing energy"
+                        : "No power exchanged"
               }
               tone="grid-card"
-              trend={m.ac_in_frequency > 0 ? `${number(m.ac_in_frequency)} Hz GRID` : "GRID"}
+              trend={
+                m.ac_in_frequency > 0
+                  ? `${number(m.ac_in_frequency)} Hz ${m.ac_in_source === "generator" ? "AC IN" : "GRID"}`
+                  : m.ac_in_source === "generator"
+                    ? "AC IN"
+                    : "GRID"
+              }
             />
             <MetricCard
               icon="generator"

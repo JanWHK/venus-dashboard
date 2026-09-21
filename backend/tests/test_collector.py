@@ -165,6 +165,22 @@ def test_ac_in_power_and_source_follow_active_input():
     assert metrics["ac_in_source"] == "generator"
 
 
+def test_live_genset_power_marks_input_as_generator_even_on_grid_slot():
+    # This installation wires the genset to AC input 0 (the "grid" slot);
+    # reported genset power, not the input slot, identifies the source.
+    collector = LiveCollector()
+    collector.connected = True
+    send(collector, "vebus/1/Ac/ActiveIn/ActiveInput", 0)
+    send(collector, "vebus/1/Ac/ActiveIn/L1/P", 3201)
+    send(collector, "system/0/Ac/Genset/L1/Power", 3201)
+    send(collector, "system/0/Ac/Consumption/L1/Power", 1405)
+    metrics = collector.snapshot()["metrics"]
+    assert metrics["ac_in_source"] == "generator"
+    assert metrics["generator_power"] == 3201
+    assert metrics["grid_power"] is None
+    assert metrics["ac_in_power"] == 3201
+
+
 def seed_at(collector, path, value, at):
     collector.values[f"system/0/{path}"] = {"value": value, "at": at}
 
