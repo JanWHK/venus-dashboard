@@ -172,6 +172,10 @@ function Flow({ metrics: m, live }) {
             className={flow(m.grid_power, m.grid_power < 0)}
             d="M139 249H271Q300 249 300 215V165H350"
           />
+          <path
+            className={flow(m.generator_power)}
+            d="M561 249H429Q400 249 400 215V165H350"
+          />
           <path className={flow(m.load_power)} d="M350 165H563" />
           <path
             className={flow(m.battery_power, m.battery_power < 0)}
@@ -214,6 +218,21 @@ function Flow({ metrics: m, live }) {
                 : m.grid_power > 20
                   ? "Importing from grid"
                   : "No grid exchange"}
+          </span>
+        </div>
+        <div className="flow-node generator-node">
+          <span className="node-icon">
+            <Icon name="generator" size={24} />
+          </span>
+          <div>
+            <span>Generator</span>
+            <strong>
+              {power(m.generator_power)} <small>kW</small>
+            </strong>
+          </div>
+          <span className="node-caption">
+            {generatorState(m.generator_state) ??
+              (m.generator_runtime != null ? "Not reported" : "No reading yet")}
           </span>
         </div>
         <div className="flow-core">
