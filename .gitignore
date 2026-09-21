@@ -8,6 +8,7 @@ playwright-tests/test-results/
 frontend/node_modules/
 *.png
 *.jpg
+!frontend/public/*.png
 frontend/dist/
 .venv/
 .pytest_cache/
