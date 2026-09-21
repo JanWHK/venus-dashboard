@@ -2268,7 +2268,7 @@ input {
 }
 .generator-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin: 4px 0 18px;
 }
@@ -2316,6 +2316,10 @@ input {
 .split-swatch.split-charging {
   background: #7a5fa0;
 }
+.seg-dc,
+.split-swatch.split-dc {
+  background: #b5803a;
+}
 [data-theme="dark"] .seg-loads,
 [data-theme="dark"] .split-swatch.split-loads {
   background: #3fa184;
@@ -2323,6 +2327,10 @@ input {
 [data-theme="dark"] .seg-charging,
 [data-theme="dark"] .split-swatch.split-charging {
   background: #9484e0;
+}
+[data-theme="dark"] .seg-dc,
+[data-theme="dark"] .split-swatch.split-dc {
+  background: #b9853f;
 }
 @media (max-width: 760px) {
   .generator-stats {

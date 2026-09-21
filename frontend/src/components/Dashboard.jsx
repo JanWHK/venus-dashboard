@@ -391,9 +391,14 @@ function GeneratorPanel({ metrics: m, activeRun }) {
   if (m.ac_in_source !== "generator" || m.ac_in_power == null) return null;
   const total = m.ac_in_power;
   const loads = m.load_power;
-  const charging = Math.max(total - (loads ?? 0), 0);
-  const loadsShare =
-    loads != null && total > 0 ? Math.min(Math.max((loads / total) * 100, 0), 100) : null;
+  const dcLoads = m.dc_load_power;
+  // Battery charging is the remainder after AC and DC loads, keeping the
+  // identity exact: total in = AC loads + DC loads (GX) + battery charging.
+  const charging = Math.max(total - (loads ?? 0) - (dcLoads ?? 0), 0);
+  const share = (value) =>
+    value != null && total > 0 ? Math.min(Math.max((value / total) * 100, 0), 100) : null;
+  const loadsShare = share(loads);
+  const dcShare = share(dcLoads);
   return (
     <section className="panel generator-panel">
       <div className="panel-heading">
@@ -423,6 +428,15 @@ function GeneratorPanel({ metrics: m, activeRun }) {
           </strong>
         </div>
         <div className="gen-stat">
+          <span title="GX Dc/System aggregate">
+            <i className="split-swatch split-dc" />
+            DC loads
+          </span>
+          <strong>
+            {formatPower(dcLoads, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+        <div className="gen-stat">
           <span>
             <i className="split-swatch split-charging" />
             To battery charging
@@ -435,13 +449,20 @@ function GeneratorPanel({ metrics: m, activeRun }) {
       <div
         className="split-bar"
         role="img"
-        aria-label={`Generator input ${formatPower(total, unit)} ${unit}: AC loads ${formatPower(loads, unit)} ${unit}, battery charging ${formatPower(charging, unit)} ${unit}`}
+        aria-label={`Generator input ${formatPower(total, unit)} ${unit}: AC loads ${formatPower(loads, unit)} ${unit}, DC loads ${formatPower(dcLoads, unit)} ${unit}, battery charging ${formatPower(charging, unit)} ${unit}`}
       >
         {loadsShare != null && (
           <span
             className="seg-loads"
             style={{ width: `${loadsShare}%` }}
             title={`To AC loads: ${formatPower(loads, unit)} ${unit}`}
+          />
+        )}
+        {dcShare != null && (
+          <span
+            className="seg-dc"
+            style={{ width: `${dcShare}%` }}
+            title={`DC loads: ${formatPower(dcLoads, unit)} ${unit}`}
           />
         )}
         <span
