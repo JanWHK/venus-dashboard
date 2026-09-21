@@ -145,6 +145,26 @@ def test_grid_falls_back_to_vebus_active_input_only_when_connected():
     assert collector.snapshot()["metrics"]["grid_power"] == -120
 
 
+def test_ac_in_power_and_source_follow_active_input():
+    collector = LiveCollector()
+    collector.connected = True
+    send(collector, "vebus/1/Ac/ActiveIn/ActiveInput", 240)
+    send(collector, "vebus/1/Ac/ActiveIn/L1/P", 0)
+    metrics = collector.snapshot()["metrics"]
+    assert metrics["ac_in_power"] is None
+    assert metrics["ac_in_source"] is None
+    send(collector, "vebus/1/Ac/ActiveIn/ActiveInput", 0)
+    send(collector, "vebus/1/Ac/ActiveIn/L1/P", 850)
+    metrics = collector.snapshot()["metrics"]
+    assert metrics["ac_in_power"] == 850
+    assert metrics["ac_in_source"] == "grid"
+    send(collector, "vebus/1/Ac/ActiveIn/ActiveInput", 1)
+    send(collector, "vebus/1/Ac/ActiveIn/L1/P", 2400)
+    metrics = collector.snapshot()["metrics"]
+    assert metrics["ac_in_power"] == 2400
+    assert metrics["ac_in_source"] == "generator"
+
+
 def seed_at(collector, path, value, at):
     collector.values[f"system/0/{path}"] = {"value": value, "at": at}
 

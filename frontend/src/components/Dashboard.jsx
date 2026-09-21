@@ -29,6 +29,12 @@ const batteryState = (value) =>
       : value < -20
         ? "Discharging"
         : "Idle";
+// Power the generator is feeding into the MultiPlus: genset telemetry when
+// it exists, otherwise the AC-in reading while input 2 (generator) is active.
+const generatorFeed = (m) =>
+  m.ac_in_source === "generator"
+    ? m.generator_power ?? m.ac_in_power
+    : m.generator_power;
 const GENERATOR_STATES = {
   0: "Stopped",
   1: "Running",
@@ -171,6 +177,7 @@ function MetricCard({ icon, title, value, detail, tone, trend }) {
 
 function Flow({ metrics: m, live }) {
   const unit = usePowerUnit();
+  const genOut = generatorFeed(m);
   const flow = (v, reverse = false) =>
     live && v != null && Math.abs(v) > 20
       ? `flow-line active ${reverse ? "reverse" : ""}`
@@ -204,7 +211,7 @@ function Flow({ metrics: m, live }) {
             className={flow(m.grid_power, m.grid_power < 0)}
             d="M139 280H271Q300 280 300 251V165H350"
           />
-          <path className={flow(m.generator_power)} d="M139 165H307" />
+          <path className={flow(genOut)} d="M139 165H307" />
           <path className={flow(m.load_power)} d="M350 165H563" />
           <path
             className={flow(m.battery_power, m.battery_power < 0)}
@@ -260,7 +267,7 @@ function Flow({ metrics: m, live }) {
           <div>
             <span>Generator</span>
             <strong>
-              {formatPower(m.generator_power, unit)} <small>{unit}</small>
+              {formatPower(genOut, unit)} <small>{unit}</small>
             </strong>
           </div>
           <span className="node-caption">
@@ -374,6 +381,74 @@ function Battery({ metrics: m }) {
             {number(m.battery_temperature)} <small>°C</small>
           </strong>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function GeneratorPanel({ metrics: m, activeRun }) {
+  const unit = usePowerUnit();
+  if (m.ac_in_source !== "generator" || m.ac_in_power == null) return null;
+  const total = m.ac_in_power;
+  const loads = m.load_power;
+  const charging = Math.max(total - (loads ?? 0), 0);
+  const loadsShare =
+    loads != null && total > 0 ? Math.min(Math.max((loads / total) * 100, 0), 100) : null;
+  return (
+    <section className="panel generator-panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">GENSET RUNNING</span>
+          <h2>Generator input.</h2>
+        </div>
+        <span className="status-pill is-live">
+          <span className="pulse-dot" />
+          {activeRun ? `Running since ${clock(activeRun.started_at)}` : "Feeding the inverter"}
+        </span>
+      </div>
+      <div className="generator-stats">
+        <div className="gen-stat total">
+          <span>Total in</span>
+          <strong>
+            {formatPower(total, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+        <div className="gen-stat">
+          <span>
+            <i className="split-swatch split-loads" />
+            To AC loads
+          </span>
+          <strong>
+            {formatPower(loads, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+        <div className="gen-stat">
+          <span>
+            <i className="split-swatch split-charging" />
+            To battery charging
+          </span>
+          <strong>
+            {formatPower(charging, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+      </div>
+      <div
+        className="split-bar"
+        role="img"
+        aria-label={`Generator input ${formatPower(total, unit)} ${unit}: AC loads ${formatPower(loads, unit)} ${unit}, battery charging ${formatPower(charging, unit)} ${unit}`}
+      >
+        {loadsShare != null && (
+          <span
+            className="seg-loads"
+            style={{ width: `${loadsShare}%` }}
+            title={`To AC loads: ${formatPower(loads, unit)} ${unit}`}
+          />
+        )}
+        <span
+          className="seg-charging"
+          style={{ flexGrow: 1 }}
+          title={`To battery charging: ${formatPower(charging, unit)} ${unit}`}
+        />
       </div>
     </section>
   );
@@ -708,11 +783,12 @@ export default function Dashboard({ demo, historyOnly = false }) {
             <MetricCard
               icon="generator"
               title="Generator"
-              value={m.generator_power}
+              value={generatorFeed(m)}
               detail={(() => {
                 const runs = data?.generator_runs;
                 if (runs?.active_run)
                   return `Running · since ${clock(runs.active_run.started_at)}`;
+                if (m.ac_in_source === "generator") return "Feeding the inverter";
                 const last = runSummary(runs?.recent?.[0]);
                 if (last) return `Last run ${last}`;
                 return (
@@ -730,6 +806,7 @@ export default function Dashboard({ demo, historyOnly = false }) {
               }
             />
           </div>
+          <GeneratorPanel metrics={m} activeRun={data?.generator_runs?.active_run} />
           <div className="energy-grid">
             <Flow metrics={m} live={live} />
             <Battery metrics={m} />

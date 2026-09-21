@@ -231,7 +231,7 @@ class LiveCollector:
         # input. ActiveInput 240 means no input is connected — never treat
         # its idle 0 V readings as grid.
         active_input = get("vebus", "Ac/ActiveIn/ActiveInput")
-        vebus_grid_power = get("vebus", "Ac/ActiveIn/L1/P") if active_input in (0, 1) else None
+        vebus_ac_in_power = get("vebus", "Ac/ActiveIn/L1/P") if active_input in (0, 1) else None
         metrics = {
             "solar_power": sum(solar_parts) if solar_parts else None,
             "battery_soc": fallback(get("system", "Dc/Battery/Soc"), get("battery", "Soc")),
@@ -239,8 +239,10 @@ class LiveCollector:
             "battery_power": fallback(get("system", "Dc/Battery/Power"), get("battery", "Dc/0/Power"),
                                       voltage * current if voltage is not None and current is not None else None),
             "battery_temperature": get("battery", "Dc/0/Temperature"),
-            "grid_power": fallback(phases("Ac/Grid"), vebus_grid_power),
+            "grid_power": fallback(phases("Ac/Grid"), vebus_ac_in_power),
             "load_power": phases("Ac/Consumption"),
+            "ac_in_power": vebus_ac_in_power,
+            "ac_in_source": {0: "grid", 1: "generator"}.get(active_input),
             "solar_yield_today": solar_sum("History/Daily/0/Yield"),
             "grid_voltage": get("grid", "Ac/L1/Voltage"),
             "ac_out_voltage": get("vebus", "Ac/Out/L1/V"),

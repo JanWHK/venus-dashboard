@@ -2261,6 +2261,79 @@ input {
 .unit-segmented button {
   padding: 7px 14px;
 }
+
+/* ---- Generator input split panel ---- */
+.generator-panel {
+  margin-bottom: 27px;
+}
+.generator-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 4px 0 18px;
+}
+.gen-stat span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+.gen-stat strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 26px;
+  font-weight: 400;
+}
+.gen-stat.total strong {
+  font-size: 30px;
+}
+.gen-stat strong small {
+  font-size: 13px;
+  color: var(--text-soft);
+}
+.split-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex: none;
+}
+.split-bar {
+  display: flex;
+  gap: 2px;
+  height: 10px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.split-bar span {
+  min-width: 0;
+}
+.seg-loads,
+.split-swatch.split-loads {
+  background: #2e8c6a;
+}
+.seg-charging,
+.split-swatch.split-charging {
+  background: #7a5fa0;
+}
+[data-theme="dark"] .seg-loads,
+[data-theme="dark"] .split-swatch.split-loads {
+  background: #3fa184;
+}
+[data-theme="dark"] .seg-charging,
+[data-theme="dark"] .split-swatch.split-charging {
+  background: #9484e0;
+}
+@media (max-width: 760px) {
+  .generator-stats {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .gen-stat strong,
+  .gen-stat.total strong {
+    font-size: 22px;
+  }
+}
 .avatar-inline {
   width: 30px;
   height: 30px;

@@ -94,6 +94,8 @@ export function demoSnapshot() {
       generator_state: 1,
       generator_power: 2560,
       generator_runtime: 15434,
+      ac_in_power: 2560,
+      ac_in_source: "generator",
     },
     generator_runs: (() => {
       const now = Date.now();
