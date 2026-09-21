@@ -14,10 +14,14 @@ If Postgres auth fails after redeployment, exec into `venus-db` and run:
 (The `venus-db-data` named volume keeps the password from first init — changing the env var alone doesn't update it.)
 
 ## Device
-- **URL:** http://192.168.178.103/gui-v1 (noVNC console) / http://192.168.178.103/gui-v2 (Qt WebAssembly UI)
+- **URL:** http://192.168.21.10/gui-v1 (noVNC console) / http://192.168.21.10/gui-v2 (Qt WebAssembly UI)
 - **Type:** Victron Venus OS GX device (NanoPi)
+- **Network:** VLAN 21 (`192.168.21.0/24`) behind pfSense — see `NETWORK_HANDOFF.md`
 - **Portal ID:** `c0619ab43e45`
-- **MQTT WebSocket:** `ws://192.168.178.103/websocket-mqtt` (requires header `Sec-WebSocket-Protocol: mqtt`)
+- **MQTT:** `mqtts://192.168.21.10:8883` — TLS with username/password (`victron`).
+  Broker uses a self-signed certificate, so the backend sets `MQTT_TLS_INSECURE=true`
+  (CERT_NONE; LAN-only). Anonymous and port 1883/9001 are rejected/redirected on this firmware.
+- **Credentials:** stored in `.env` (git-ignored) as `MQTT_USERNAME`/`MQTT_PASSWORD`. Never commit them.
 - **Keepalive:** publish to `R/c0619ab43e45/keepalive` after connect to trigger data
 
 ## Why not Playwright DOM scraping

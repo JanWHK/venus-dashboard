@@ -1,5 +1,7 @@
 # Fresh Setup Guide
 
+> This document describes the original Excel logger. For the new Helio dashboard, login setup, live MQTT connection and Docker workflow, see [README.md](README.md).
+
 ## Prerequisites
 ```bash
 pip3 install paho-mqtt openpyxl playwright

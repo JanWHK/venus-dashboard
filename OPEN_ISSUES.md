@@ -1,5 +1,7 @@
 # Open Issues & Next Steps
 
+> Historical notes for the original logger. Helio now provides the web dashboard and Solar MPPT telemetry. Current setup and GX connection limitations are documented in [README.md](README.md).
+
 ## Known Issues
 
 ### Permission denied on battery_log.xlsx
