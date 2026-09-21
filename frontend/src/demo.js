@@ -79,11 +79,43 @@ export function demoSnapshot() {
       battery_temperature: 25.6,
       solar_yield_today: 18.4,
       ac_out_voltage: 230.1,
+      ac_out_current: 8,
+      ac_out_apparent: 1840,
       ac_out_frequency: 50,
+      ac_in_voltage: 231.2,
+      ac_in_current: 4.1,
+      ac_in_frequency: 50,
+      dc_load_power: 64,
+      dc_load_current: 1.2,
+      pv_voltage: 96.4,
+      pv_current: 34.1,
+      inverter_state: 9,
       system_state: 3,
       generator_state: 1,
       generator_power: 2560,
       generator_runtime: 15434,
     },
+    generator_runs: (() => {
+      const now = Date.now();
+      return {
+        active_run: null,
+        recent: [
+          {
+            started_at: new Date(now - 26 * 3600_000).toISOString(),
+            ended_at: new Date(now - 26 * 3600_000 + 92 * 60_000).toISOString(),
+            duration_seconds: 92 * 60,
+            energy_kwh: 24.8,
+            peak_power_w: 2950,
+          },
+          {
+            started_at: new Date(now - 50 * 3600_000).toISOString(),
+            ended_at: new Date(now - 50 * 3600_000 + 47 * 60_000).toISOString(),
+            duration_seconds: 47 * 60,
+            energy_kwh: 12.1,
+            peak_power_w: 2780,
+          },
+        ],
+      };
+    })(),
   };
 }

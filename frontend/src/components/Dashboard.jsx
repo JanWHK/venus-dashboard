@@ -45,6 +45,36 @@ const generatorRuntime = (seconds) => {
   const hours = seconds / 3600;
   return hours >= 10 ? `${number(hours, 0)} h` : `${number(hours)} h`;
 };
+const INVERTER_STATES = {
+  0: "Offline",
+  1: "Starting up",
+  2: "Fault",
+  3: "Low SOC",
+  4: "Float",
+  5: "Bulk charging",
+  6: "Absorption",
+  7: "Inverting",
+  8: "Assisting",
+  9: "Inverting",
+};
+const inverterState = (code) =>
+  code == null ? null : INVERTER_STATES[code] ?? null;
+const formatDuration = (seconds) => {
+  if (seconds == null) return null;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.round((seconds % 3600) / 60);
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+};
+const clock = (iso) =>
+  iso
+    ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : null;
+const runSummary = (run) => {
+  if (!run) return null;
+  const duration = formatDuration(run.duration_seconds);
+  if (duration == null) return null;
+  return `${duration}${run.energy_kwh != null ? ` · ${number(run.energy_kwh, 2)} kWh` : ""}`;
+};
 
 export function useTelemetry(demo, path = "/live") {
   const [data, setData] = useState(() => (demo ? demoSnapshot() : null));
@@ -144,6 +174,7 @@ function Flow({ metrics: m, live }) {
     live && v != null && Math.abs(v) > 20
       ? `flow-line active ${reverse ? "reverse" : ""}`
       : "flow-line";
+  const timeToGo = formatDuration(m.battery_time_to_go);
   return (
     <section className="panel flow-panel">
       <div className="panel-heading">
@@ -166,16 +197,13 @@ function Flow({ metrics: m, live }) {
         >
           <path
             className={flow(m.solar_power)}
-            d="M139 91H271Q300 91 300 120V165H350"
+            d="M139 49H271Q300 49 300 78V165H350"
           />
           <path
             className={flow(m.grid_power, m.grid_power < 0)}
-            d="M139 249H271Q300 249 300 215V165H350"
+            d="M139 280H271Q300 280 300 251V165H350"
           />
-          <path
-            className={flow(m.generator_power)}
-            d="M561 249H429Q400 249 400 215V165H350"
-          />
+          <path className={flow(m.generator_power)} d="M139 165H307" />
           <path className={flow(m.load_power)} d="M350 165H563" />
           <path
             className={flow(m.battery_power, m.battery_power < 0)}
@@ -193,11 +221,13 @@ function Flow({ metrics: m, live }) {
             </strong>
           </div>
           <span className="node-caption">
-            {m.solar_power == null
-              ? "No reading yet"
-              : m.solar_power > 20
-                ? "Harvesting sunshine"
-                : "Standing by"}
+            {m.pv_voltage != null
+              ? `PV ${number(m.pv_voltage)} V`
+              : m.solar_power == null
+                ? "No reading yet"
+                : m.solar_power > 20
+                  ? "Harvesting sunshine"
+                  : "Standing by"}
           </span>
         </div>
         <div className="flow-node grid-node">
@@ -211,13 +241,15 @@ function Flow({ metrics: m, live }) {
             </strong>
           </div>
           <span className="node-caption">
-            {m.grid_power == null
-              ? "No reading yet"
-              : m.grid_power < -20
-                ? "Exporting to grid"
-                : m.grid_power > 20
-                  ? "Importing from grid"
-                  : "No grid exchange"}
+            {m.ac_in_voltage > 0
+              ? `${number(m.ac_in_voltage)} V · ${number(m.ac_in_frequency)} Hz`
+              : m.grid_power == null
+                ? "No reading yet"
+                : m.grid_power < -20
+                  ? "Exporting to grid"
+                  : m.grid_power > 20
+                    ? "Importing from grid"
+                    : "No grid exchange"}
           </span>
         </div>
         <div className="flow-node generator-node">
@@ -240,7 +272,7 @@ function Flow({ metrics: m, live }) {
             <Icon name="bolt" size={31} />
           </div>
           <strong>Energy hub</strong>
-          <span>Victron system</span>
+          <span>{inverterState(m.inverter_state) ?? "Victron system"}</span>
         </div>
         <div className="flow-node home-node">
           <span className="node-icon">
@@ -253,12 +285,19 @@ function Flow({ metrics: m, live }) {
             </strong>
           </div>
           <span className="node-caption">
-            {m.load_power == null ? "No reading yet" : "Current consumption"}
+            {m.load_power == null
+              ? "No reading yet"
+              : m.ac_out_voltage != null
+                ? `${number(m.ac_out_voltage)} V · ${number(m.ac_out_frequency)} Hz`
+                : "Current consumption"}
           </span>
         </div>
         <div className="flow-battery">
           <Icon name="battery" size={21} />
-          <span>{batteryState(m.battery_power)}</span>
+          <span>
+            {batteryState(m.battery_power)}
+            {timeToGo && ` · ${timeToGo}`}
+          </span>
           <strong>{power(m.battery_power)} kW</strong>
         </div>
       </div>
@@ -610,7 +649,7 @@ export default function Dashboard({ demo, historyOnly = false }) {
                   : `${number(m.solar_yield_today)} kWh harvested today`
               }
               tone="solar-card"
-              trend="PV"
+              trend={m.pv_voltage != null ? `${number(m.pv_voltage)} V PV` : "PV"}
             />
             <MetricCard
               icon="home"
@@ -618,7 +657,7 @@ export default function Dashboard({ demo, historyOnly = false }) {
               value={m.load_power}
               detail="Powering your everyday"
               tone="home-card"
-              trend="AC"
+              trend={m.ac_out_current != null ? `${number(m.ac_out_current)} A AC` : "AC"}
             />
             <MetricCard
               icon="battery"
@@ -642,20 +681,31 @@ export default function Dashboard({ demo, historyOnly = false }) {
                       : "No power exchanged"
               }
               tone="grid-card"
-              trend="GRID"
+              trend={m.ac_in_frequency > 0 ? `${number(m.ac_in_frequency)} Hz GRID` : "GRID"}
             />
             <MetricCard
               icon="generator"
               title="Generator"
               value={m.generator_power}
-              detail={
-                generatorState(m.generator_state) ??
-                (m.generator_runtime != null
-                  ? "Not reported by GX"
-                  : "No generator connected")
-              }
+              detail={(() => {
+                const runs = data?.generator_runs;
+                if (runs?.active_run)
+                  return `Running · since ${clock(runs.active_run.started_at)}`;
+                const last = runSummary(runs?.recent?.[0]);
+                if (last) return `Last run ${last}`;
+                return (
+                  generatorState(m.generator_state) ??
+                  (m.generator_runtime != null
+                    ? "Not reported by GX"
+                    : "No generator connected")
+                );
+              })()}
               tone="generator-card"
-              trend={m.generator_runtime != null ? `${generatorRuntime(m.generator_runtime)} total` : "GEN"}
+              trend={
+                m.generator_runtime != null
+                  ? `${generatorRuntime(m.generator_runtime)} total`
+                  : "GEN"
+              }
             />
           </div>
           <div className="energy-grid">
@@ -692,7 +742,20 @@ export default function Dashboard({ demo, historyOnly = false }) {
               <span>AC output</span>
               <strong>
                 {number(m.ac_out_voltage)} V <span> / </span>
+                {number(m.ac_out_current)} A <span> / </span>
                 {number(m.ac_out_frequency)} Hz
+              </strong>
+            </div>
+            <div className="system-row">
+              <span>DC loads</span>
+              <strong>
+                {m.dc_load_power != null ? `${number(m.dc_load_power, 0)} W` : "—"}
+              </strong>
+            </div>
+            <div className="system-row">
+              <span>PV array</span>
+              <strong>
+                {m.pv_voltage != null ? `${number(m.pv_voltage)} V` : "—"}
               </strong>
             </div>
             <div className="system-row">
@@ -702,6 +765,23 @@ export default function Dashboard({ demo, historyOnly = false }) {
                 {m.generator_runtime != null &&
                   ` · ${generatorRuntime(m.generator_runtime)}`}
               </strong>
+            </div>
+            <div className="system-row">
+              <span>Last run</span>
+              <strong>{(() => {
+                const runs = data?.generator_runs;
+                const active = runs?.active_run;
+                if (active) {
+                  const sofar = runSummary(active) ?? `since ${clock(active.started_at)}`;
+                  return `Running ${sofar} · since ${clock(active.started_at)}`;
+                }
+                const last = runs?.recent?.[0];
+                if (last) {
+                  const summary = runSummary(last) ?? "—";
+                  return `${summary} · ended ${clock(last.ended_at) ?? "—"}`;
+                }
+                return "—";
+              })()}</strong>
             </div>
             <div className="system-row">
               <span>Active alarms</span>

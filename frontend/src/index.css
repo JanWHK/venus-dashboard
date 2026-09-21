@@ -502,8 +502,8 @@ input {
   line-height: 1.5;
 }
 .metric-trend {
-  font-size: 10px;
-  letter-spacing: 1px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
   font-weight: 500;
   opacity: 0.7;
 }
@@ -589,7 +589,7 @@ input {
   box-shadow: none;
 }
 .flow-scene {
-  height: 289px;
+  height: 305px;
   position: relative;
   margin: 0 10px;
 }
@@ -629,7 +629,7 @@ input {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 12px 11px;
+  padding: 10px 11px;
   width: 25%;
   display: grid;
   grid-template-columns: 31px 1fr;
@@ -647,7 +647,7 @@ input {
   align-self: center;
 }
 .flow-node > div > span {
-  font-size: 10px;
+  font-size: 11px;
   display: block;
   margin-bottom: 3px;
   white-space: nowrap;
@@ -660,26 +660,32 @@ input {
   white-space: nowrap;
 }
 .flow-node small {
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0;
   color: var(--text-soft);
   font-weight: 400;
 }
 .node-caption {
   grid-column: 1/-1;
-  font-size: 9px;
-  margin-top: 8px;
+  font-size: 10px;
+  margin-top: 6px;
   text-align: center;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--text-soft);
 }
 .solar-node {
   left: 5%;
-  top: 10%;
+  top: 2%;
+}
+.generator-node {
+  left: 5%;
+  top: 36%;
 }
 .grid-node {
   left: 5%;
-  bottom: 9%;
+  bottom: 2%;
 }
 .home-node {
   right: 3%;
@@ -717,12 +723,12 @@ input {
     0 0 0 10px #f8faf5;
 }
 .flow-core > strong {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   margin-top: 13px;
 }
 .flow-core > span {
-  font-size: 9px;
+  font-size: 10px;
   margin-top: 3px;
   color: var(--text-soft);
 }
@@ -737,7 +743,7 @@ input {
   border: 1px solid #e3ead7;
   padding: 8px 10px;
   border-radius: 6px;
-  font-size: 10px;
+  font-size: 11px;
   white-space: nowrap;
   color: var(--success-text);
 }
@@ -970,7 +976,7 @@ input {
   color: var(--text-soft);
 }
 .system-row > strong {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   text-align: right;
   overflow-wrap: anywhere;
@@ -978,7 +984,7 @@ input {
 .system-row > strong > span {
   font-weight: 400;
   color: #c4cbbb;
-  font-size: 10px;
+  font-size: 11px;
 }
 .system-link {
   display: flex;
@@ -1589,10 +1595,11 @@ input {
     font-size: 9px;
   }
   .flow-node .node-caption {
-    font-size: 8px;
+    font-size: 9px;
   }
   .solar-node,
-  .grid-node {
+  .grid-node,
+  .generator-node {
     left: 3%;
   }
   .home-node {
@@ -1609,7 +1616,7 @@ input {
     display: none;
   }
   .flow-battery {
-    font-size: 9px;
+    font-size: 10px;
     left: 47%;
     padding: 7px;
   }
@@ -1812,14 +1819,15 @@ input {
     font-size: 19px;
   }
   .flow-node .node-caption {
-    font-size: 9px;
+    font-size: 10px;
   }
   .node-icon {
     width: 30px;
     height: 32px;
   }
   .solar-node,
-  .grid-node {
+  .grid-node,
+  .generator-node {
     left: 5%;
   }
   .flow-battery {
@@ -2075,8 +2083,12 @@ input {
     column-gap: 4px;
   }
   .solar-node,
-  .grid-node {
+  .grid-node,
+  .generator-node {
     left: 2%;
+  }
+  .generator-node {
+    top: 35%;
   }
   .home-node {
     right: 1%;
@@ -2098,7 +2110,7 @@ input {
     font-size: 9px;
   }
   .flow-node .node-caption {
-    font-size: 8px;
+    font-size: 9px;
     margin-top: 4px;
   }
   .core-ring {
@@ -2392,24 +2404,10 @@ input {
 [data-theme="dark"] .alarm-text {
   color: var(--danger);
 }
-.generator-node {
-  right: 3%;
-  bottom: 9%;
-}
 .generator-node .node-icon {
   background: var(--tint);
   color: #7a5fa0;
 }
 [data-theme="dark"] .generator-node .node-icon {
   color: #9484e0;
-}
-@media (max-width: 1200px) {
-  .generator-node {
-    right: 2%;
-  }
-}
-@media (max-width: 760px) {
-  .generator-node {
-    right: 1%;
-  }
 }
