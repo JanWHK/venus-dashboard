@@ -1,41 +1,64 @@
 # Open Issues & Next Steps
 
-> Historical notes for the original logger. Helio now provides the web dashboard and Solar MPPT telemetry. Current setup and GX connection limitations are documented in [README.md](README.md).
+> Live status as of 2026-09-21. The Helio dashboard (Docker, `localhost:8081`) replaces
+> the original Excel logger as the primary interface; historical notes at the bottom.
 
-## Known Issues
+## Open items
 
-### Permission denied on battery_log.xlsx
-- **Status:** Unresolved — context unknown (file manager? network share? Windows?)
-- **File permissions:** `-rw-r--r--` owned by `janj` — readable by all local users
-- **If accessing from Windows via Samba:** `/home/janj` is `drwx------` (700), which blocks
-  traversal from network. Fix: `chmod 755 /home/janj` or move the file to a shared folder.
-- **If file is open in Excel while cron writes:** Excel locks the file → cron write fails silently.
-  Check `venus_logger.log` for errors.
+### Grid exchange card has no data
+- **Cause:** the GX publishes no `grid` service — grid flows through the MultiPlus
+  (`vebus/275/Ac/ActiveIn/*`), and no grid meter is installed.
+- **Options:** map vebus AC-in power as a `grid_power` fallback in
+  `backend/collector.py`, or install a grid meter. Until then the card and chart series
+  stay empty.
 
-### Screen columns show None for first ~5 rows in test runs
-- **Cause:** Playwright WebSocket takes ~3-5s to connect and receive initial MQTT burst.
-- **Impact:** Only affects manual test runs. Cron job (single row per run) always waits 10s
-  before writing, so values are always populated.
+### Generator state/power not published
+- **Cause:** generator start/stop is configured on the GX (4.3 h lifetime runtime in
+  `system/0/Timers/TimeOnGenerator`) but no genset device reports
+  `generator/0/State` or `Ac/Genset/*` power. All `Ac/Genset/*` topics exist but are null.
+- **Impact:** none — UI shows the card/flow node with "Not reported by GX" and the
+  lifetime runtime. It lights up automatically if a genset is connected and reporting.
 
-## Potential Improvements
+### Legacy logger cron fails every 10 minutes
+- `crontab` still runs `/usr/bin/python3 /home/janj/victron/venus_logger.py`, which
+  lacks `paho`/`openpyxl` → `ModuleNotFoundError` in `venus_logger.log` every tick.
+- `battery_log.xlsx` stale since 2026-03-28. Helio replaces the logger.
+- **Action:** delete the crontab entry (recommended) or revive the logger per SETUP.md.
 
-### Add more metrics
-Available but not yet logged (from venus_discover.py):
-- Solar: `N/c0619ab43e45/solarcharger/274/Dc/0/Power` — solar panel power (W)
-- Solar: `N/c0619ab43e45/solarcharger/274/Yield/Power` — yield
-- Battery power: `N/c0619ab43e45/battery/512/Dc/0/Power` — net battery power (W)
-- Battery temp: `N/c0619ab43e45/battery/512/Dc/0/Temperature` — °C
+### Production deploy lacks MQTT settings
+- Dokploy needs `VENUS_PORT=8883`, `MQTT_TLS=true`, `MQTT_TLS_INSECURE=true`,
+  `MQTT_USERNAME`, `MQTT_PASSWORD` (same values as local `.env`), and network reachability
+  from the Dokploy host to `192.168.21.10` — which is only routable from VLAN 21/LAN.
+  Running the production stack off-site will not reach the GX.
 
-### Adding a new column
-1. Add topic to `MQTT_TOPICS` dict in `venus_logger.py`
-2. Add header to `HEADERS` list
-3. Add `fmt(mqtt_collected.get("..."))` to `row` list in same position
-4. Update row 1 of existing Excel: run the header-update snippet in CLAUDE.md
+### VLAN 21 routed access & cleanup (from NETWORK_HANDOFF.md)
+- `tenda-recovery-vlan21` temporary NetworkManager interface is **still active** on this
+  workstation; the GX is reachable through it (and now through whatever path the user
+  fixed — confirm before removing it).
+- Remaining handoff checklist: verify routed access via pfSense LAN, verify the `.125`
+  client, delete both `tenda-recovery-*` profiles and the temporary `192.168.2.10/24`
+  address, then the security follow-ups (Tenda admin password, WPA2/AES).
+- See the "Next-agent completion checklist" in `NETWORK_HANDOFF.md`.
 
-### Auto-open Excel file
-Currently the file must be manually opened. Could serve it via a simple HTTP server
-or push to Google Sheets / OneDrive for live access.
+### No password recovery flow
+- By design. An operator with database access must reset accounts.
 
-### Grafana / dashboard
-All MQTT data is available live — could wire directly into Grafana via MQTT datasource
-pointing at `192.168.178.103/websocket-mqtt`.
+## Resolved / historical
+
+### Helio MQTT connection (resolved 2026-09-21)
+- Was: port 80 `/websocket-mqtt` returns 302 on this firmware; anonymous rejected.
+- Fix: MQTT over TLS on 8883 with credentials; `MQTT_TLS_INSECURE=true` for the
+  self-signed certificate; compose now forwards `MQTT_TLS_INSECURE`.
+
+### Screen columns show None for first ~5 rows in test runs (historical, logger)
+- Playwright WebSocket needed ~3-5s to connect before values appeared. Cron-based runs
+  always waited 10s. Superseded with the logger.
+
+### Permission denied on battery_log.xlsx (historical, unresolved context)
+- `/home/janj` is `drwx------` (700), blocking Samba traversal; Excel holding the file
+  open also locked cron writes. Moot while the logger is unused.
+
+### Potential extra metrics (implemented in Helio)
+- Solar power, battery power/temperature and generator runtime are all live now.
+- `solar_yield_today` (`solarcharger/*/History/Daily/0/Yield`) feeds the "harvested
+  today" line. Grid remains the only gap (see above).

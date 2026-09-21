@@ -1,5 +1,6 @@
 # Project workflow
 
+- Start from [HANDOFF.md](HANDOFF.md) — current state, run/test commands and known gotchas.
 - Prefix shell commands with `rtk`. Use `rtk proxy` only when a filtered result is unusable.
 - Use the `caveman` skill for concise communication. Keep source, documentation and UI copy in normal English.
 - Prefer codebase-memory-mcp for code discovery. Re-index after significant changes.

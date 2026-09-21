@@ -298,3 +298,28 @@ These are follow-up items, not prerequisites for restoring routing:
 - Do not restore the broad `192.168.0.0/16` WireGuard route as the path for `192.168.21.0/24`; the directly connected `/24` must remain authoritative.
 - Do not factory-reset the Tenda again.
 - Do not change the workstation back to only `192.168.100.10` until routed access to `.194` is proven, because the active temporary VLAN 21 interface is currently the recovery path.
+
+---
+
+## Status update — 2026-09-21 (Helio dashboard integration)
+
+The operator reports the VLAN 21 network is now fixed and working. Verified from this
+workstation during Helio integration:
+
+- The GX answers at `192.168.21.10` (not the `.194` recorded above — the device was
+  re-addressed or replaced; `B8:4D:43:13:39:54` above may not match). CLAUDE.md has the
+  current address.
+- MQTT is enabled with authentication: TLS on port **8883** (username/password), broker
+  certificate self-signed. Ports 1883/9001 refuse or fail auth; port 80
+  `/websocket-mqtt` returns 302. Helio connects with `MQTT_TLS_INSECURE=true` for this
+  reason (encrypted but unverified peer — LAN only).
+- Helio reads live telemetry from the GX: 4 devices, ~1,100 live data points.
+
+**Still open from the checklist above (do not skip):**
+
+1. Routed-access verification (step 2) was never performed with the operator's fix —
+   `tenda-recovery-vlan21` is **still active** on this workstation and may be masking
+   the routed path. Confirm `ip route get 192.168.21.10` uses `192.168.100.1` before
+   deleting anything.
+2. The `.125` client check (step 3), temp-profile cleanup (step 4), and the security
+   follow-ups (step 5) remain pending.
