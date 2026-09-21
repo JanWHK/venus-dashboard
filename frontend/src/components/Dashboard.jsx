@@ -220,7 +220,7 @@ function Flow({ metrics: m, live }) {
         </svg>
         <div className="flow-node solar-node">
           <span className="node-icon">
-            <Icon name="sun" size={24} />
+            <Icon name={m.solar_power ? "sun" : "moon"} size={24} />
           </span>
           <div>
             <span>Solar array</span>
