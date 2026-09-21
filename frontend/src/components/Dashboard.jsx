@@ -271,8 +271,10 @@ function Flow({ metrics: m, live }) {
             </strong>
           </div>
           <span className="node-caption">
-            {generatorState(m.generator_state) ??
-              (m.generator_runtime != null ? "Not reported" : "No reading yet")}
+            {m.ac_in_source === "generator" && m.ac_in_voltage > 0
+              ? `${number(m.ac_in_voltage)} V · ${number(m.ac_in_frequency)} Hz`
+              : generatorState(m.generator_state) ??
+                (m.generator_runtime != null ? "Not reported" : "No reading yet")}
           </span>
         </div>
         <div className="flow-core">
