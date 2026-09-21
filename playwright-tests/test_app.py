@@ -1,146 +1,81 @@
-"""Playwright tests for Venus OS Dashboard.
-
-Run:
-    cd playwright-tests
-    pip install -r requirements.txt
-    playwright install chromium
-    pytest -v
-"""
-import json
-import re
-import time
-import urllib.request
+"""Helio browser regression tests. Default tests use only the explicit demo."""
+import os
 
 import pytest
 from playwright.sync_api import Page, expect
 
-BASE = "http://localhost:8081"
+BASE = os.getenv("HELIO_BASE_URL", "http://localhost:8081")
 
 
-# ── helpers ──────────────────────────────────────────────────────────────────
-
-
-def open_dashboard(page: Page):
+def open_demo(page: Page):
     page.goto(BASE)
-    page.wait_for_load_state("networkidle")
+    page.get_by_role("button", name="Explore the demo").click()
+    expect(page.get_by_role("heading", name="Hello, brighter day.")).to_be_visible()
 
 
-def open_settings(page: Page):
-    page.goto(f"{BASE}/settings")
-    page.wait_for_load_state("networkidle")
+def test_login_guards_workspace(page: Page):
+    page.goto(f"{BASE}/devices")
+    expect(page.get_by_label("Username", exact=True)).to_be_visible()
+    assert page.request.get(f"{BASE}/api/live").status == 401
 
 
-# ── tests ─────────────────────────────────────────────────────────────────────
+def test_demo_has_explicit_sample_label_and_energy_flow(page: Page):
+    open_demo(page)
+    expect(page.locator(".demo-banner")).to_contain_text("Illustrative data")
+    expect(page.get_by_role("heading", name="Your energy, in motion.")).to_be_visible()
+    expect(page.locator(".gauge-number")).to_contain_text("81")
 
 
-def test_app_loads(page: Page):
-    """Home page renders without errors."""
-    open_dashboard(page)
-    expect(page.locator("text=Venus OS")).to_be_visible()
-    expect(page.locator("[data-testid=time-range-selector]")).to_be_visible()
+def test_chart_controls(page: Page):
+    open_demo(page)
+    solar = page.get_by_role("button", name="Solar", exact=True)
+    solar.click()
+    expect(solar).to_have_attribute("aria-pressed", "false")
+    solar.click()
+    expect(solar).to_have_attribute("aria-pressed", "true")
+    page.get_by_role("button", name="24 hours", exact=True).click()
+    expect(page.get_by_role("button", name="24 hours", exact=True)).to_have_attribute("aria-pressed", "true")
 
 
-def test_settings_page_loads(page: Page):
-    """Settings page shows interval selector."""
-    open_settings(page)
-    expect(page.locator("[data-testid=interval-select]")).to_be_visible()
-    expect(page.locator("[data-testid=save-btn]")).to_be_visible()
+def test_device_search(page: Page):
+    open_demo(page)
+    page.get_by_role("navigation", name="Main navigation").get_by_role("link", name="Devices", exact=True).click()
+    expect(page.get_by_role("heading", name="SmartSolar MPPT 250/70")).to_be_visible()
+    page.get_by_role("searchbox").fill("Temperature")
+    expect(page.locator(".device-panel")).to_have_count(1)
+    expect(page.locator(".device-reading")).to_contain_text("Dc/0/Temperature")
+    page.get_by_role("searchbox").fill("does-not-exist")
+    expect(page.get_by_role("heading", name="No matching readings.")).to_be_visible()
 
 
-def _api_put_settings(interval_seconds: int):
-    req = urllib.request.Request(
-        f"{BASE}/api/settings",
-        data=json.dumps({"interval_seconds": interval_seconds}).encode(),
-        method="PUT",
-        headers={"Content-Type": "application/json"},
-    )
-    urllib.request.urlopen(req)
+def test_demo_preferences_never_save_to_server(page: Page):
+    writes = []
+    page.on("request", lambda request: writes.append(request.url) if request.method == "PUT" else None)
+    open_demo(page)
+    page.get_by_role("navigation", name="Main navigation").get_by_role("link", name="Settings", exact=True).click()
+    page.get_by_role("radio", name="Every 5 minutes").check()
+    page.get_by_role("button", name="Save preferences").click()
+    expect(page.get_by_role("status")).to_have_text("Preview updated. Nothing saved.")
+    assert writes == []
 
 
-def test_settings_change_interval(page: Page):
-    """Change interval to 5s, save, verify toast and disabled state resets."""
-    _api_put_settings(60)  # ensure known starting state
-    open_settings(page)
-
-    # Select 5 seconds
-    page.select_option("[data-testid=interval-select]", "5")
-    expect(page.locator("[data-testid=save-btn]")).to_be_enabled()
-
-    # Save
-    page.click("[data-testid=save-btn]")
-    expect(page.locator("[data-testid=toast]")).to_contain_text("Saved")
-
-    # After save, button should be disabled again (selected == saved)
-    expect(page.locator("[data-testid=save-btn]")).to_be_disabled()
-
-    # Reset back to 60s so other tests aren't affected
-    page.select_option("[data-testid=interval-select]", "60")
-    page.click("[data-testid=save-btn]")
-    expect(page.locator("[data-testid=toast]")).to_contain_text("Saved")
+@pytest.mark.parametrize("width", [320, 390, 768, 1440])
+def test_responsive_layout_and_exit(page: Page, width):
+    page.set_viewport_size({"width": width, "height": 900})
+    open_demo(page)
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    page.locator("button:visible").filter(has_text="Exit demo").first.click()
+    expect(page.get_by_label("Username", exact=True)).to_be_visible()
 
 
-def test_metric_toggle_hides_chart(page: Page):
-    """Unchecking all battery metrics hides the battery chart."""
-    open_dashboard(page)
-
-    # Battery chart should be visible initially
-    expect(page.locator("[data-testid=chart-battery]")).to_be_visible()
-
-    # Uncheck all battery metrics
-    for key in ["battery_soc", "battery_voltage", "battery_current"]:
-        checkbox = page.locator(f"[data-testid=metric-toggle-{key}] input")
-        if checkbox.is_checked():
-            checkbox.uncheck()
-
-    # Battery chart should disappear
-    expect(page.locator("[data-testid=chart-battery]")).not_to_be_visible()
-
-    # Re-enable
-    for key in ["battery_soc", "battery_voltage", "battery_current"]:
-        page.locator(f"[data-testid=metric-toggle-{key}] input").check()
-
-
-def test_time_range_buttons(page: Page):
-    """Clicking a time range button changes the active style."""
-    open_dashboard(page)
-
-    btn_1h = page.locator("[data-testid=range-1h]")
-    btn_6h = page.locator("[data-testid=range-6h]")
-
-    # Click 6h
-    btn_6h.click()
-    expect(btn_6h).to_have_class(re.compile(r"bg-green-700"))
-    expect(btn_1h).not_to_have_class(re.compile(r"bg-green-700"))
-
-    # Click back to 1h
-    btn_1h.click()
-    expect(btn_1h).to_have_class(re.compile(r"bg-green-700"))
-
-
-@pytest.mark.slow
-def test_readings_appear_after_collection(page: Page):
-    """With a 5s interval, data rows should appear within ~20s.
-
-    Requires the Venus OS device to be reachable at 192.168.178.103.
-    Skip if not in a live environment.
-    """
-    # Set interval to 5s
-    open_settings(page)
-    page.select_option("[data-testid=interval-select]", "5")
-    page.click("[data-testid=save-btn]")
-    expect(page.locator("[data-testid=toast]")).to_contain_text("Saved")
-
-    # Go to dashboard
-    open_dashboard(page)
-
-    # Wait up to 30s for data to appear (charts render only when data exists)
-    page.wait_for_selector(
-        "[data-testid=chart-battery]",
-        state="visible",
-        timeout=30000,
-    )
-
-    # Reset interval
-    open_settings(page)
-    page.select_option("[data-testid=interval-select]", "60")
-    page.click("[data-testid=save-btn]")
+@pytest.mark.skipif(not os.getenv("HELIO_TEST_PASSWORD"), reason="Requires an explicitly configured test account")
+def test_login_and_logout(page: Page):
+    page.goto(BASE)
+    page.get_by_label("Username", exact=True).fill(os.environ.get("HELIO_TEST_USERNAME", "owner"))
+    page.locator('input[name="password"]').fill(os.environ["HELIO_TEST_PASSWORD"])
+    page.get_by_role("button", name="Sign in to your workspace").click()
+    expect(page.get_by_role("heading", name="Hello, brighter day.")).to_be_visible()
+    assert page.request.get(f"{BASE}/api/live").status == 200
+    page.locator('button[aria-label="Sign out"]:visible').first.click()
+    expect(page.get_by_label("Username", exact=True)).to_be_visible()
+    assert page.request.get(f"{BASE}/api/live").status == 401
