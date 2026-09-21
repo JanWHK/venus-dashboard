@@ -7,8 +7,6 @@ services:
       POSTGRES_PASSWORD: venus
     volumes:
       - venus-db-data:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
     networks:
       - venus-net
     healthcheck:
@@ -21,9 +19,17 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+asyncpg://venus:venus@venus-db:5432/venus
-      VENUS_HOST: 192.168.178.103
-      VENUS_PORT: "80"
-      PORTAL_ID: c0619ab43e45
+      VENUS_HOST: ${VENUS_HOST:-192.168.21.10}
+      VENUS_PORT: ${VENUS_PORT:-9001}
+      PORTAL_ID: ${PORTAL_ID:-c0619ab43e45}
+      MQTT_TRANSPORT: ${MQTT_TRANSPORT:-websockets}
+      MQTT_WS_PATH: ${MQTT_WS_PATH:-/}
+      MQTT_TLS: ${MQTT_TLS:-false}
+      MQTT_TLS_INSECURE: ${MQTT_TLS_INSECURE:-false}
+      MQTT_USERNAME: ${MQTT_USERNAME:-}
+      MQTT_PASSWORD: ${MQTT_PASSWORD:-}
+      COOKIE_SECURE: "false"
+      DASHBOARD_SETUP_TOKEN: ${DASHBOARD_SETUP_TOKEN:-}
     depends_on:
       venus-db:
         condition: service_healthy
@@ -33,7 +39,7 @@ services:
   venus-frontend:
     build: ./frontend
     ports:
-      - "8081:80"
+      - "127.0.0.1:8081:80"
     depends_on:
       - venus-backend
     networks:

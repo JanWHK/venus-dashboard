@@ -1,70 +1,139 @@
-import datetime
-import os
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+import time
+from collections import deque
+from contextlib import asynccontextmanager, suppress
+from datetime import datetime, timezone
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from pydantic import AwareDatetime, BaseModel
 from sqlalchemy import select, text
 
-from collector import collect_reading
-from database import Reading, SessionLocal, Setting, init_db, sync_engine, SyncSessionLocal
+from auth import initialize_auth, require_admin, require_csrf_header, require_user, router as auth_router
+from collector import collector
+from database import DashboardSetting, EnergySample, GeneratorRun, SessionLocal, engine, init_db
 
-VALID_INTERVALS = [1, 5, 10, 20, 30, 60, 600, 1800, 3600]
-
-scheduler = BackgroundScheduler()
-_current_interval = 60
-
-
-def _run_collection():
-    # Wait just long enough to receive MQTT burst; cap at interval-1s, min 2s
-    wait = max(2.0, min(3.0, _current_interval - 1))
-    data = collect_reading(wait_seconds=wait)
-    if not data:
-        print("Collection returned no data", flush=True)
-        return
-    try:
-        with SyncSessionLocal(sync_engine) as session:
-            reading = Reading(**data)
-            session.add(reading)
-            session.commit()
-        print(f"Saved reading: {data}", flush=True)
-    except Exception as e:
-        print(f"Save error: {e}", flush=True)
+VALID_INTERVALS = [0, 300, 600, 900, 1800, 3600]
+SUMMARY_FIELDS = ["solar_power", "grid_power", "load_power", "battery_power", "battery_soc", "generator_power"]
+live_history = deque(maxlen=90)
+recording_interval = 0
 
 
-def _reschedule(interval_seconds: int):
-    global _current_interval
-    _current_interval = interval_seconds
-    scheduler.remove_all_jobs()
-    scheduler.add_job(_run_collection, "interval", seconds=interval_seconds, id="collect")
+async def save_summary(snapshot):
+    values = {key: snapshot["metrics"].get(key) for key in SUMMARY_FIELDS}
+    if snapshot["status"] != "live" or not any(value is not None for value in values.values()):
+        return False
+    async with SessionLocal() as session:
+        session.add(EnergySample(recorded_at=datetime.now(timezone.utc), **values))
+        await session.commit()
+    return True
+
+
+def active_run_duration(active):
+    """Exact seconds so far: Timers counter delta when available."""
+    if active["duration_base"] is not None and collector.timers_prev is not None:
+        return max(0.0, collector.timers_prev - active["duration_base"])
+    return max(0.0, time.time() - active["started_at"])
+
+
+def run_row_values(run, ended=False):
+    duration = run.get("duration_seconds")
+    if duration is None and not ended:
+        duration = active_run_duration(run)
+    return {
+        "duration_seconds": duration,
+        "energy_kwh": round(run["energy_wh"] / 1000, 4) if run["power_seen"] else None,
+        "peak_power_w": run["peak_w"],
+        "updated_at": datetime.now(timezone.utc),
+    }
+
+
+async def persist_generator_runs():
+    async with SessionLocal() as session:
+        for run in collector.drain_generator_runs():
+            session.add(GeneratorRun(
+                started_at=datetime.fromtimestamp(run["started_at"], timezone.utc),
+                ended_at=datetime.fromtimestamp(run["ended_at"], timezone.utc),
+                **run_row_values(run, ended=True),
+            ))
+        active = collector.generator_run
+        row = (await session.execute(
+            select(GeneratorRun).where(GeneratorRun.ended_at.is_(None))
+        )).scalar_one_or_none()
+        if active:
+            values = run_row_values(active)
+            values["started_at"] = datetime.fromtimestamp(active["started_at"], timezone.utc)
+            if row is None:
+                session.add(GeneratorRun(ended_at=None, **values))
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+        elif row is not None:
+            row.ended_at = row.updated_at
+        await session.commit()
+
+
+async def run_telemetry():
+    last_saved = time.monotonic()
+    tick = 0
+    while True:
+        snapshot = collector.snapshot()
+        point = {key: snapshot["metrics"].get(key) for key in SUMMARY_FIELDS}
+        point["recorded_at"] = datetime.now(timezone.utc).isoformat()
+        live_history.append(point)
+        if tick % 3 == 0:
+            collector.keepalive()
+        tick += 1
+        now = time.monotonic()
+        if recording_interval and now - last_saved >= recording_interval:
+            last_saved = now
+            try:
+                await save_summary(snapshot)
+            except Exception:
+                logging.getLogger("uvicorn.error").exception("Could not save energy summary")
+        try:
+            await persist_generator_runs()
+        except Exception:
+            logging.getLogger("uvicorn.error").exception("Could not save generator run")
+        await asyncio.sleep(10)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global recording_interval
     await init_db()
+    await initialize_auth()
+    # Runs left open by a previous process can no longer see their real end.
+    # The duration column already holds the exact seconds; close the window.
     async with SessionLocal() as session:
-        result = await session.execute(select(Setting).limit(1))
-        setting = result.scalar_one_or_none()
-        interval = setting.interval_seconds if setting else 60
-    _reschedule(interval)
-    scheduler.start()
-    yield
-    scheduler.shutdown(wait=False)
+        await session.execute(
+            text("UPDATE generator_runs SET ended_at = updated_at WHERE ended_at IS NULL"))
+        await session.commit()
+    async with SessionLocal() as session:
+        setting = await session.get(DashboardSetting, 1)
+        recording_interval = setting.interval_seconds if setting else 900
+    collector.start()
+    task = asyncio.create_task(run_telemetry())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        await asyncio.to_thread(collector.stop)
+        await engine.dispose()
 
 
-app = FastAPI(lifespan=lifespan)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="Helio", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+app.include_router(auth_router)
 
 
-class SettingsIn(BaseModel):
-    interval_seconds: int
+@app.middleware("http")
+async def response_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.get("/api/health")
@@ -72,68 +141,78 @@ async def health():
     return {"status": "ok"}
 
 
-@app.get("/api/settings")
-async def get_settings():
+def run_payload(row):
+    return {
+        "started_at": row.started_at.isoformat(),
+        "ended_at": row.ended_at.isoformat() if row.ended_at else None,
+        "duration_seconds": row.duration_seconds,
+        "energy_kwh": row.energy_kwh,
+        "peak_power_w": row.peak_power_w,
+    }
+
+
+@app.get("/api/live", dependencies=[Depends(require_user)])
+async def live():
     async with SessionLocal() as session:
-        result = await session.execute(select(Setting).limit(1))
-        setting = result.scalar_one_or_none()
-        return {"interval_seconds": setting.interval_seconds if setting else 60}
+        rows = (await session.execute(
+            select(GeneratorRun).order_by(GeneratorRun.started_at.desc()).limit(3)
+        )).scalars().all()
+    active = collector.generator_run
+    active_run = None
+    if active:
+        active_run = {
+            "started_at": datetime.fromtimestamp(active["started_at"], timezone.utc).isoformat(),
+            **run_row_values(active),
+        }
+        active_run.pop("updated_at", None)
+    return {**collector.snapshot(), "history": list(live_history), "recording_interval": recording_interval,
+            "generator_runs": {"active_run": active_run,
+                               "recent": [run_payload(row) for row in rows]}}
 
 
-@app.put("/api/settings")
-async def update_settings(body: SettingsIn):
+@app.get("/api/devices", dependencies=[Depends(require_user)])
+async def devices():
+    return collector.snapshot(include_devices=True)
+
+
+class SettingsIn(BaseModel):
+    interval_seconds: int
+
+
+@app.get("/api/settings", dependencies=[Depends(require_user)])
+async def settings():
+    return {"interval_seconds": recording_interval, "host": collector.host,
+            "portal_id": collector.portal, "transport": collector.transport, "port": collector.port}
+
+
+@app.put("/api/settings", dependencies=[Depends(require_csrf_header)])
+async def update_settings(body: SettingsIn, user=Depends(require_admin)):
+    global recording_interval
     if body.interval_seconds not in VALID_INTERVALS:
-        raise HTTPException(400, f"interval_seconds must be one of {VALID_INTERVALS}")
+        raise HTTPException(422, "Choose live only, 5, 10, 15, 30 minutes or 1 hour")
     async with SessionLocal() as session:
-        result = await session.execute(select(Setting).limit(1))
-        setting = result.scalar_one_or_none()
+        setting = await session.get(DashboardSetting, 1)
         if setting:
             setting.interval_seconds = body.interval_seconds
         else:
-            setting = Setting(interval_seconds=body.interval_seconds)
-            session.add(setting)
+            session.add(DashboardSetting(id=1, interval_seconds=body.interval_seconds))
         await session.commit()
-    _reschedule(body.interval_seconds)
-    return {"interval_seconds": body.interval_seconds}
+    recording_interval = body.interval_seconds
+    return {"interval_seconds": recording_interval}
 
 
-@app.get("/api/readings")
-async def get_readings(
-    from_time: str = Query(None, alias="from"),
-    to_time: str = Query(None, alias="to"),
-    limit: int = Query(500, le=5000),
-):
+@app.get("/api/readings", dependencies=[Depends(require_user)])
+async def readings(from_time: AwareDatetime | None = Query(None, alias="from"),
+                   to_time: AwareDatetime | None = Query(None, alias="to"),
+                   limit: int = Query(2000, ge=1, le=5000)):
+    if from_time and to_time and from_time.timestamp() > to_time.timestamp():
+        raise HTTPException(422, "Start time must precede end time")
+    query = select(EnergySample).order_by(EnergySample.recorded_at.desc()).limit(limit)
+    if from_time:
+        query = query.where(EnergySample.recorded_at >= from_time)
+    if to_time:
+        query = query.where(EnergySample.recorded_at <= to_time)
     async with SessionLocal() as session:
-        query = select(Reading).order_by(Reading.recorded_at.desc()).limit(limit)
-        if from_time:
-            query = query.where(Reading.recorded_at >= datetime.datetime.fromisoformat(from_time.replace("Z", "+00:00")))
-        if to_time:
-            query = query.where(Reading.recorded_at <= datetime.datetime.fromisoformat(to_time.replace("Z", "+00:00")))
-        result = await session.execute(query)
-        rows = result.scalars().all()
-
-    return [
-        {
-            "id": r.id,
-            "recorded_at": r.recorded_at.isoformat(),
-            "battery_soc": r.battery_soc,
-            "battery_voltage": r.battery_voltage,
-            "battery_current": r.battery_current,
-            "ac_in_voltage": r.ac_in_voltage,
-            "ac_in_current": r.ac_in_current,
-            "ac_in_power": r.ac_in_power,
-            "ac_in_frequency": r.ac_in_frequency,
-            "ac_out_voltage": r.ac_out_voltage,
-            "ac_out_current": r.ac_out_current,
-            "ac_out_power": r.ac_out_power,
-            "ac_out_frequency": r.ac_out_frequency,
-            "solar_pv_voltage":   r.solar_pv_voltage,
-            "solar_pv_current":   r.solar_pv_current,
-            "solar_pv_power":     r.solar_pv_power,
-            "solar_batt_voltage": r.solar_batt_voltage,
-            "solar_batt_current": r.solar_batt_current,
-            "solar_yield_total":  r.solar_yield_total,
-            "solar_yield_system": r.solar_yield_system,
-        }
-        for r in reversed(rows)
-    ]
+        rows = (await session.execute(query)).scalars().all()
+    return [{"recorded_at": row.recorded_at.isoformat(), **{k: getattr(row, k) for k in SUMMARY_FIELDS}}
+            for row in reversed(rows)]
