@@ -94,5 +94,7 @@
 - Generator input split (2026-09-22): live panel + flow captions while the genset
   feeds (commits `1f52fad`, `ebff508`, `8ba193d`, `4016584`, `41edeec`), with
   percentage labels under the split bar that always sum to 100 % (`039efca`).
+- Solar input panel (2026-09-22, `a38419f`): the same split panel for the array while
+  it produces (PV V · A heading, same segment colors, percentage row, hidden at night).
 - Sun/moon idle icons (2026-09-22): the solar card and flow node switch to a crescent
   when `solar_power` is 0/null (`ea53f92`, `3db65be`).

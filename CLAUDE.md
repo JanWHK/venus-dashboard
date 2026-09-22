@@ -49,6 +49,12 @@ If Postgres auth fails after redeployment, exec into `venus-db` and run:
   total in = AC loads + DC loads (GX) + battery charging, where charging is the
   remainder so the identity is exact; the split bar carries percentage labels that
   always sum to 100 %.
+- **Solar input panel** (2026-09-22, commit `a38419f`) — same split construction for
+  the array while `solar_power > 0`: Total harvest = AC loads + DC loads + charging
+  (remainder). Same segment colors as the generator panel (same destinations);
+  heading shows PV V · A; hidden at night, matching the sun/moon icon rule. During a
+  rare solar + genset overlap each panel's "charging" remainder includes both charge
+  sources — acceptable, they are displays, not metering.
 - `system/0/Ac/Consumption/L1/Power` ≡ vebus `Ac/Out/L1/P` (Home consumption = AC out).
   `Dc/System/Power` is a noisy GX DC aggregate (swings a few hundred W) — it feeds the
   panel's DC-loads line, so expect the tile to wobble.

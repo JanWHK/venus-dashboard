@@ -12,8 +12,9 @@ logger (`venus_logger.py`, `battery_log.xlsx` — legacy, broken, see OPEN_ISSUE
 
 **Current state: working locally and in production.** Live GX telemetry, 15-minute
 history recording, multi-user accounts (admin + viewers), a live generator: the genset
-wired to MultiPlus AC input 0, reporting power while it runs, with a Generator input
-split panel and persisted run log, light/dark theming. The earlier dashboard work is merged
+wired to MultiPlus AC input 0, reporting power while it runs, with Generator input and
+Solar input split panels and a persisted run log, light/dark theming. The earlier
+dashboard work is merged
 to `main`. Battery alerts are documented in `ALERTS.md`; release procedure and
 verification are in `DEPLOYMENT.md`.
 
@@ -131,6 +132,12 @@ assumptions in the older sections and produced six deployed commits:
   segment in muted ink, sharing its exact width. Shares always read a clean 100 %
   (AC + DC rounded, charging carries the remainder, clamped ≥ 0); labels follow
   segments, so DC's hides while the GX gives no `Dc/System` reading.
+- `a38419f` — **Solar input panel**: the same four-tile/segment-bar/percentage panel
+  for the array, shown while `solar_power > 0` (hidden at night, matching the sun/moon
+  icon rule). Heading line is PV V · A instead of AC V · Hz. Reuses the generator
+  panel's validated segment colors because both split into the same three
+  destinations. Caveat: during a solar + genset overlap, each panel's charging
+  remainder includes both charge sources (they are displays, not metering).
 - `1f52fad` (earlier the same day) — the Generator input panel itself.
 
 All six were deployed to production via the deploy skill with all 7 checks green, and
