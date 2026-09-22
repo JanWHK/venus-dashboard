@@ -57,7 +57,11 @@ If Postgres auth fails after redeployment, exec into `venus-db` and run:
   sources — acceptable, they are displays, not metering.
 - `system/0/Ac/Consumption/L1/Power` ≡ vebus `Ac/Out/L1/P` (Home consumption = AC out).
   `Dc/System/Power` is a noisy GX DC aggregate (swings a few hundred W) — it feeds the
-  panel's DC-loads line, so expect the tile to wobble.
+  panel's DC-loads line, so expect the tile to wobble. Verified 2026-09-22: it is a
+  GX-calculated residual of the DC bus (PV − inverter − battery), published with
+  `MeasurementType 0` (= indication, not metered); the real constant DC load reads
+  ~120 W (2.3 A). A blip there reshuffles the split between DC and charging but
+  never changes the totals.
 - Genset output is not instantaneous either (swings ~500 W between 15 s samples); the
   AC-in ≈ loads + battery + DC + inverter-losses identity holds to ~4–6 %.
 

@@ -287,7 +287,7 @@ function GeneratorReport({ data, unit }) {
             <Tile
               label="DC loads (GX)"
               swatch="split-dc"
-              title="GX Dc/System aggregate — updated every second live, stored in summaries every 15 minutes"
+              title="GX-computed DC system indication (Dc/System) — updated every second live, snapshotted every 15 minutes; it is a residual, not a meter, and can swing by a couple hundred watts"
               value={kWh(energy.dc_loads_kwh)}
               unit="kWh"
             />
@@ -392,7 +392,7 @@ function SolarReport({ data }) {
             <Tile
               label="DC loads (GX)"
               swatch="split-dc"
-              title="GX Dc/System aggregate — updated every second live, stored in summaries every 15 minutes"
+              title="GX-computed DC system indication (Dc/System) — updated every second live, snapshotted every 15 minutes; it is a residual, not a meter, and can swing by a couple hundred watts"
               value={kWh(energy.dc_loads_kwh)}
               unit="kWh"
             />
@@ -468,7 +468,7 @@ function ConsumptionReport({ data }) {
             <Tile total label="AC loads" value={kWh(energy.ac_loads_kwh)} unit="kWh" />
             <Tile
               label="DC loads (GX)"
-              title="GX Dc/System aggregate — updated every second live, stored in summaries every 15 minutes"
+              title="GX-computed DC system indication (Dc/System) — updated every second live, snapshotted every 15 minutes; it is a residual, not a meter, and can swing by a couple hundred watts"
               value={kWh(energy.dc_loads_kwh)}
               unit="kWh"
             />

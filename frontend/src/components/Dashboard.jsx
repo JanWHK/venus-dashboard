@@ -435,9 +435,9 @@ function GeneratorPanel({ metrics: m, activeRun }) {
           </strong>
         </div>
         <div className="gen-stat">
-          <span title="GX Dc/System aggregate">
+          <span title="GX-computed DC system indication (Dc/System) — not a meter, swings by a couple hundred watts">
             <i className="split-swatch split-dc" />
-            DC loads
+            DC loads (GX)
           </span>
           <strong>
             {formatPower(dcLoads, unit)} <small>{unit}</small>
@@ -469,7 +469,7 @@ function GeneratorPanel({ metrics: m, activeRun }) {
           <span
             className="seg-dc"
             style={{ width: `${dcShare}%` }}
-            title={`DC loads: ${formatPower(dcLoads, unit)} ${unit}`}
+            title={`DC loads (GX indication): ${formatPower(dcLoads, unit)} ${unit}`}
           />
         )}
         <span
@@ -537,9 +537,9 @@ function SolarPanel({ metrics: m }) {
           </strong>
         </div>
         <div className="gen-stat">
-          <span title="GX Dc/System aggregate">
+          <span title="GX-computed DC system indication (Dc/System) — not a meter, swings by a couple hundred watts">
             <i className="split-swatch split-dc" />
-            DC loads
+            DC loads (GX)
           </span>
           <strong>
             {formatPower(dcLoads, unit)} <small>{unit}</small>
@@ -571,7 +571,7 @@ function SolarPanel({ metrics: m }) {
           <span
             className="seg-dc"
             style={{ width: `${dcShare}%` }}
-            title={`DC loads: ${formatPower(dcLoads, unit)} ${unit}`}
+            title={`DC loads (GX indication): ${formatPower(dcLoads, unit)} ${unit}`}
           />
         )}
         <span
