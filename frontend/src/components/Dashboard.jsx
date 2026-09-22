@@ -489,6 +489,108 @@ function GeneratorPanel({ metrics: m, activeRun }) {
   );
 }
 
+function SolarPanel({ metrics: m }) {
+  const unit = usePowerUnit();
+  // Same visibility rule as the sun/moon icon: hidden while idle or dark.
+  if (m.solar_power == null || m.solar_power <= 0) return null;
+  const total = m.solar_power;
+  const loads = m.load_power;
+  const dcLoads = m.dc_load_power;
+  // Same remainder identity as the generator panel: the array covers AC and
+  // DC loads first, and whatever is left charges the battery.
+  const charging = Math.max(total - (loads ?? 0) - (dcLoads ?? 0), 0);
+  const share = (value) =>
+    value != null && total > 0 ? Math.min(Math.max((value / total) * 100, 0), 100) : null;
+  const loadsShare = share(loads);
+  const dcShare = share(dcLoads);
+  return (
+    <section className="panel generator-panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">ARRAY PRODUCING</span>
+          <h2>Solar input.</h2>
+          {(m.pv_voltage != null || m.pv_current != null) && (
+            <span className="gen-supply">
+              {number(m.pv_voltage)} V · {number(m.pv_current)} A PV
+            </span>
+          )}
+        </div>
+        <span className="status-pill is-live">
+          <span className="pulse-dot" />
+          Harvesting sunshine
+        </span>
+      </div>
+      <div className="generator-stats">
+        <div className="gen-stat total">
+          <span>Total harvest</span>
+          <strong>
+            {formatPower(total, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+        <div className="gen-stat">
+          <span>
+            <i className="split-swatch split-loads" />
+            To AC loads
+          </span>
+          <strong>
+            {formatPower(loads, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+        <div className="gen-stat">
+          <span title="GX Dc/System aggregate">
+            <i className="split-swatch split-dc" />
+            DC loads
+          </span>
+          <strong>
+            {formatPower(dcLoads, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+        <div className="gen-stat">
+          <span>
+            <i className="split-swatch split-charging" />
+            To battery charging
+          </span>
+          <strong>
+            {formatPower(charging, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+      </div>
+      <div
+        className="split-bar"
+        role="img"
+        aria-label={`Solar harvest ${formatPower(total, unit)} ${unit}: AC loads ${formatPower(loads, unit)} ${unit}, DC loads ${formatPower(dcLoads, unit)} ${unit}, battery charging ${formatPower(charging, unit)} ${unit}`}
+      >
+        {loadsShare != null && (
+          <span
+            className="seg-loads"
+            style={{ width: `${loadsShare}%` }}
+            title={`To AC loads: ${formatPower(loads, unit)} ${unit}`}
+          />
+        )}
+        {dcShare != null && (
+          <span
+            className="seg-dc"
+            style={{ width: `${dcShare}%` }}
+            title={`DC loads: ${formatPower(dcLoads, unit)} ${unit}`}
+          />
+        )}
+        <span
+          className="seg-charging"
+          style={{ flexGrow: 1 }}
+          title={`To battery charging: ${formatPower(charging, unit)} ${unit}`}
+        />
+      </div>
+      <div className="split-labels" aria-hidden="true">
+        {loadsShare != null && <span style={{ width: `${loadsShare}%` }}>{Math.round(loadsShare)}%</span>}
+        {dcShare != null && <span style={{ width: `${dcShare}%` }}>{Math.round(dcShare)}%</span>}
+        <span style={{ flexGrow: 1 }}>
+          {Math.max(0, 100 - (loadsShare != null ? Math.round(loadsShare) : 0) - (dcShare != null ? Math.round(dcShare) : 0))}%
+        </span>
+      </div>
+    </section>
+  );
+}
+
 function EnergyChart({ liveData, demo, historyOnly }) {
   const [range, setRange] = useState(historyOnly ? "24h" : "live");
   const [stored, setStored] = useState([]);
@@ -849,6 +951,7 @@ export default function Dashboard({ demo, historyOnly = false }) {
               }
             />
           </div>
+          <SolarPanel metrics={m} />
           <GeneratorPanel metrics={m} activeRun={data?.generator_runs?.active_run} />
           <div className="energy-grid">
             <Flow metrics={m} live={live} />
