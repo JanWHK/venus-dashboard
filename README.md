@@ -51,8 +51,9 @@ configuration, limitations, and testing. See [DEPLOYMENT.md](DEPLOYMENT.md) for 
 - Browser polling: 2 seconds; device explorer: 5 seconds.
 - MQTT cache: at most 6,000 scalar telemetry paths. Readings expire after 90 seconds and are invalidated on reconnect.
 - Live chart: 90 points at 10-second intervals, held in memory (15 minutes). Restarting clears this buffer.
-- History: **15-minute summaries by default**, user-settable to off / 5 / 10 / 15 / 30 / 60 minutes. Snapshots store solar power, grid power, home power, battery power, generator power and charge percentage — sampled readings, not averages or energy totals.
+- History: **15-minute summaries by default**, user-settable to off / 5 / 10 / 15 / 30 / 60 minutes. Snapshots store solar power, grid power, home power, battery power, generator power, AC-in power, DC load power and charge percentage — sampled readings, not averages or energy totals.
 - Generator runs: every genset session is persisted in `generator_runs` (start, end, exact duration from the Timers counter, kWh and peak W when power data exists). The active run is refreshed every 10 seconds, so a backend restart loses at most the current tick; runs left open by a restart are closed on startup using the already-exact duration.
+- Reports (`/reports`): date-range totals for generator, solar and consumption, integrated from the saved summaries with a spacing-adaptive gap guard (the collector's fixed 180 s rule would discard every summary segment). The generator report splits genset energy into AC loads, DC loads and battery charging over run windows — charging is the remainder, exactly as on the live panel. DC loads and AC-in power only enter summaries from 2026-09-22; earlier rows contribute nothing to those series.
 - Existing `readings` and `settings` tables remain intact. The dashboard uses separate summary/settings tables; the history screen displays new summaries only.
 - Appearance (light/dark/system) is per device, stored in localStorage; dark chart palettes are contrast- and CVD-validated.
 - Cookies are HttpOnly and SameSite=Strict. Production forces Secure cookies; local HTTP uses `COOKIE_SECURE=false`.

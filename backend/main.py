@@ -12,10 +12,12 @@ from sqlalchemy import select, text
 from auth import initialize_auth, require_admin, require_csrf_header, require_user, router as auth_router
 from collector import collector
 import alerts
+import reports
 from database import DashboardSetting, EnergySample, GeneratorRun, SessionLocal, engine, init_db
 
 VALID_INTERVALS = [0, 300, 600, 900, 1800, 3600]
-SUMMARY_FIELDS = ["solar_power", "grid_power", "load_power", "battery_power", "battery_soc", "generator_power"]
+SUMMARY_FIELDS = ["solar_power", "grid_power", "load_power", "battery_power", "battery_soc",
+                  "generator_power", "ac_in_power", "dc_load_power"]
 live_history = deque(maxlen=90)
 recording_interval = 0
 
@@ -138,6 +140,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Helio", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(auth_router)
 app.include_router(alerts.router)
+app.include_router(reports.router)
 
 
 @app.middleware("http")

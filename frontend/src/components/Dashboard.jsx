@@ -64,13 +64,13 @@ const INVERTER_STATES = {
 };
 const inverterState = (code) =>
   code == null ? null : INVERTER_STATES[code] ?? null;
-const formatDuration = (seconds) => {
+export const formatDuration = (seconds) => {
   if (seconds == null) return null;
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.round((seconds % 3600) / 60);
   return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 };
-const clock = (iso) =>
+export const clock = (iso) =>
   iso
     ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     : null;
@@ -131,7 +131,7 @@ export function useTheme() {
   return theme;
 }
 
-const CHART_COLORS = {
+export const CHART_COLORS = {
   light: {
     solar_power: "#b3862f",
     load_power: "#2e8c6a",

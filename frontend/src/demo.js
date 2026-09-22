@@ -121,3 +121,118 @@ export function demoSnapshot() {
     })(),
   };
 }
+
+// Demo counterpart of GET /api/reports/{kind}. Data-only, clearly illustrative.
+export function demoReport(kind) {
+  const now = new Date();
+  const day = (offset) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - offset);
+    return d;
+  };
+  const head = {
+    from: new Date(day(29).setHours(0, 0, 0, 0)).toISOString(),
+    to: now.toISOString(),
+    generated_at: now.toISOString(),
+    samples: { used: 2740, complete: true, median_interval_seconds: 900 },
+  };
+  const daily = Array.from({ length: 30 }, (_, i) => ({
+    date: day(29 - i).toLocaleDateString("en-CA"),
+    energy_kwh:
+      kind === "generator"
+        ? i % 3 === 0
+          ? null
+          : Math.round((14 + Math.sin(i / 2.4) * 6) * 100) / 100
+        : Math.round((16 + Math.sin(i / 3) * 7 + i / 9) * 100) / 100,
+    ...(kind === "generator"
+      ? {
+          duration_seconds: i % 3 === 0 ? 0 : Math.round(5200 + Math.sin(i / 2) * 1600),
+          runs: i % 3 === 0 ? 0 : i % 3 === 1 ? 1 : 2,
+        }
+      : {}),
+  }));
+  if (kind === "generator") {
+    return {
+      ...head,
+      kind,
+      runs: {
+        count: 14,
+        total_duration_seconds: 51234,
+        avg_duration_seconds: 3659.6,
+        max_duration_seconds: 9100,
+        peak_power_w: 3120,
+        energy_kwh: 118.412,
+        energy_known_runs: 11,
+      },
+      run_list: [
+        {
+          started_at: new Date(day(1).setHours(18, 4)).toISOString(),
+          ended_at: new Date(day(1).setHours(20, 35)).toISOString(),
+          duration_seconds: 9100,
+          energy_kwh: 12.84,
+          peak_power_w: 3010,
+        },
+        {
+          started_at: new Date(day(3).setHours(7, 12)).toISOString(),
+          ended_at: new Date(day(3).setHours(8, 41)).toISOString(),
+          duration_seconds: 5340,
+          energy_kwh: 7.41,
+          peak_power_w: 2950,
+        },
+        {
+          started_at: new Date(day(6).setHours(19, 48)).toISOString(),
+          ended_at: new Date(day(6).setHours(20, 57)).toISOString(),
+          duration_seconds: 4140,
+          energy_kwh: null,
+          peak_power_w: null,
+        },
+      ],
+      energy: {
+        window: "runs",
+        genset_kwh: 121.31,
+        ac_loads_kwh: 41.24,
+        dc_loads_kwh: 2.06,
+        charging_kwh: 78.01,
+        battery_charged_kwh: 76.94,
+        total_in_samples: 214,
+        ac_loads_samples: 210,
+        dc_loads_samples: 96,
+      },
+      daily,
+    };
+  }
+  if (kind === "solar") {
+    return {
+      ...head,
+      kind,
+      energy: {
+        window: "range",
+        generated_kwh: 512.66,
+        ac_loads_kwh: 201.4,
+        dc_loads_kwh: 9.83,
+        charging_kwh: 301.43,
+        battery_charged_kwh: 296.1,
+        generated_samples: 2740,
+        ac_loads_samples: 2712,
+        dc_loads_samples: 96,
+      },
+      daily,
+    };
+  }
+  return {
+    ...head,
+    kind: "consumption",
+    energy: {
+      window: "range",
+      ac_loads_kwh: 214.9,
+      dc_loads_kwh: 10.2,
+      battery_discharged_kwh: 305.7,
+      grid_import_kwh: null,
+      ac_loads_samples: 2712,
+      dc_loads_samples: 96,
+      battery_discharged_samples: 2740,
+      grid_import_samples: 0,
+    },
+    daily,
+  };
+}

@@ -143,6 +143,21 @@ assumptions in the older sections and produced six deployed commits:
 All six were deployed to production via the deploy skill with all 7 checks green, and
 each verified by asset-hash comparison on the host (`Dashboard-*.js` grep).
 
+- `Reports section` (2026-09-22, later the same day): new `/reports` page with
+  Generator / Solar / Consumption reports over a date range (presets or custom dates).
+  Backend `backend/reports.py` adds `GET /api/reports/{kind}` (viewer-readable) with
+  trapezoid integration over `energy_samples` and a median-spacing gap guard (≤ 2.5×
+  median interval — the collector's fixed 180 s rule would discard every summary).
+  `energy_samples` gained `ac_in_power`/`dc_load_power` columns (idempotent ALTERs,
+  `SUMMARY_FIELDS` extended), so the generator split (AC loads / DC loads / battery
+  charging as remainder) is exact going forward; rows before 2026-09-22 simply don't
+  contribute to those series and the UI says so. The generator report also carries
+  run stats (count, metered kWh, total/avg/max duration, peak W), a newest-first run
+  table and a per-day kWh bar chart. Total genset kWh comes from `generator_runs`
+  (10 s rectangles) while the split comes from 15-min trapezoids — they are presented
+  as separate figures and can differ a few percent. 59 integration tests + 8 pure
+  unit tests on the integrator (`backend/tests/test_reports.py`).
+
 Physics notes for the next agent (verified against live GX data):
 `Ac/Consumption/L1/Power` ≡ vebus `Ac/Out/L1/P` exactly; `Dc/System/Power` is a noisy
 GX aggregate (swings a few hundred W — the DC tile will wobble); genset output itself

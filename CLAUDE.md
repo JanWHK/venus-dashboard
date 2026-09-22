@@ -68,12 +68,20 @@ so it fails every tick; `battery_log.xlsx` is stale since 2026-03-28. Helio repl
 Either delete the crontab line or reinstall the deps if the Excel export is still wanted.
 
 ## History recording
-- `energy_samples` table: solar/grid/load/battery power, battery SoC, generator power.
+- `energy_samples` table: solar/grid/load/battery power, battery SoC, generator power,
+  plus `ac_in_power`/`dc_load_power` (only since 2026-09-22 — older rows leave those
+  series empty, which the Reports UI calls out).
 - `generator_runs` table: one row per genset run — start/end, exact duration (Timers
   counter delta), kWh + peak W when power telemetry exists. Active run upserted every
   10 s; runs left open by a restart are closed at startup with `ended_at = updated_at`.
 - Default every 15 minutes (user-settable in Settings: off / 5 / 10 / 15 / 30 / 60 min).
 - Feeds the 24h/7d chart via `/api/readings`; live chart is memory-only (15 min).
+- Reports (`backend/reports.py`, `GET /api/reports/{generator,solar,consumption}?from&to`):
+  trapezoid integration over the summaries. The gap guard adapts to the median sample
+  spacing (≤ 2.5×) — do NOT reuse the collector's fixed 180 s rule here, summaries are
+  5–60 min apart and a fixed guard would discard every segment. The generator split
+  integrates only over run windows; a generator report with no runs in range returns
+  `energy: null` even when samples exist (by design).
 
 ## Gotchas
 - `COMPOSE_PROJECT_NAME=victron-helio` lives in `.env` — plain `docker compose ...`

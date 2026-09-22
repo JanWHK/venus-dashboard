@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 import auth
 import main
-from database import Account, DashboardSetting, EnergySample, LoginSession, BatteryAlert, BatteryAlertRule, sync_engine
+from database import Account, DashboardSetting, EnergySample, GeneratorRun, LoginSession, BatteryAlert, BatteryAlertRule, sync_engine
 
 HEADERS = {"X-Helio-Request": "1"}
 CREDENTIALS = {"username": "owner", "password": "test-only-long-password"}
@@ -40,7 +40,7 @@ def client():
         with TestClient(main.app) as client:
             # This code is gated above to the explicitly supplied disposable test database.
             with Session(sync_engine) as session:
-                for table in [LoginSession, Account, DashboardSetting, EnergySample, BatteryAlert, BatteryAlertRule]:
+                for table in [LoginSession, Account, DashboardSetting, EnergySample, GeneratorRun, BatteryAlert, BatteryAlertRule]:
                     session.execute(delete(table))
                 session.commit()
             auth.setup_token = os.environ["DASHBOARD_SETUP_TOKEN"]
@@ -55,7 +55,7 @@ def create_owner(client):
 
 
 def test_all_telemetry_endpoints_require_authentication(client):
-    for path in ["/api/live", "/api/devices", "/api/settings", "/api/readings", "/api/auth/me", "/api/alerts"]:
+    for path in ["/api/live", "/api/devices", "/api/settings", "/api/readings", "/api/reports/generator", "/api/auth/me", "/api/alerts"]:
         assert client.get(path).status_code == 401
     assert client.put("/api/settings", json={"interval_seconds": 300}, headers=HEADERS).status_code == 401
     assert client.get("/api/health").status_code == 200
@@ -174,6 +174,7 @@ def test_owner_manages_viewers(client):
     assert client.get("/api/auth/me").json()["role"] == "viewer"
     assert client.get("/api/live").status_code == 200
     assert client.get("/api/readings").status_code == 200
+    assert client.get("/api/reports/generator").status_code == 200
     assert client.get("/api/auth/users").status_code == 403
     assert client.put("/api/settings", json={"interval_seconds": 900}, headers=HEADERS).status_code == 403
     assert client.post("/api/auth/users", json={**viewer_credentials, "role": "viewer"}, headers=HEADERS).status_code == 403
@@ -221,3 +222,105 @@ def test_fifteen_minute_interval_is_valid(client):
     create_owner(client)
     assert client.put("/api/settings", json={"interval_seconds": 900}, headers=HEADERS).status_code == 200
     assert client.get("/api/settings").json()["interval_seconds"] == 900
+
+
+def test_report_kind_and_range_validation(client):
+    create_owner(client)
+    now = datetime.now(timezone.utc)
+    assert client.get("/api/reports/nonsense").status_code == 404
+    assert client.get("/api/reports/generator", params={
+        "from": now.isoformat(), "to": (now - timedelta(days=1)).isoformat()}).status_code == 422
+    assert client.get("/api/reports/generator", params={
+        "from": (now - timedelta(days=400)).isoformat(), "to": now.isoformat()}).status_code == 422
+    # Naive timestamps are rejected; an offset is required.
+    assert client.get("/api/reports/generator", params={"from": "2026-09-21T10:00:00"}).status_code == 422
+    empty = client.get("/api/reports/solar").json()
+    assert empty["energy"] is None
+    assert empty["daily"] == []
+    assert empty["samples"]["used"] == 0
+    one_sample = client.get("/api/reports/generator").json()  # no runs, no samples yet
+    assert one_sample["runs"]["count"] == 0
+    assert one_sample["energy"] is None
+
+
+def test_generator_report_totals(client):
+    create_owner(client)
+    now = datetime.now(timezone.utc)
+    base = now - timedelta(seconds=1500)
+    with Session(sync_engine) as session:
+        for i in range(6):
+            session.add(EnergySample(
+                recorded_at=base + timedelta(seconds=300 * i),
+                load_power=1000.0, dc_load_power=200.0, ac_in_power=3000.0,
+                battery_power=-1500.0))
+        session.add(GeneratorRun(
+            started_at=base, ended_at=base + timedelta(seconds=1500),
+            duration_seconds=1500.0, energy_kwh=1.3, peak_power_w=3100.0,
+            updated_at=base + timedelta(seconds=1500)))
+        session.add(GeneratorRun(
+            started_at=now - timedelta(seconds=600), ended_at=now - timedelta(seconds=300),
+            duration_seconds=300.0, energy_kwh=None, peak_power_w=None,
+            updated_at=now - timedelta(seconds=300)))
+        session.commit()
+    data = client.get("/api/reports/generator", params={
+        "from": (now - timedelta(hours=2)).isoformat(), "to": now.isoformat(),
+        "tz_offset_minutes": 0}).json()
+    assert data["samples"]["used"] == 6
+    runs = data["runs"]
+    assert runs["count"] == 2
+    assert runs["energy_kwh"] == 1.3
+    assert runs["energy_known_runs"] == 1
+    assert runs["total_duration_seconds"] == 1800.0
+    assert runs["peak_power_w"] == 3100.0
+    energy = data["energy"]
+    assert energy["window"] == "runs"
+    assert energy["genset_kwh"] == round(1.25, 4)  # 3000 W over 1500 s
+    assert energy["ac_loads_kwh"] == round(1000 * 1500 / 3_600_000, 4)
+    assert energy["dc_loads_kwh"] == round(200 * 1500 / 3_600_000, 4)
+    assert energy["charging_kwh"] == round(1.25 - 5 / 12 - 1 / 12, 4)
+    assert energy["battery_charged_kwh"] == round(1500 * 1500 / 3_600_000, 4)
+    assert energy["total_in_samples"] == 6
+    assert energy["ac_loads_samples"] == 6
+    assert energy["dc_loads_samples"] == 6
+    assert len(data["run_list"]) == 2
+    assert data["run_list"][0]["energy_kwh"] is None  # newest first: the unmetered run
+    day = data["daily"][0]
+    assert day["runs"] == 2
+    assert day["duration_seconds"] == 1800.0
+    assert day["energy_kwh"] == 1.3
+    # The two new summary fields ride along with /api/readings.
+    row = client.get("/api/readings").json()[-1]
+    assert row["ac_in_power"] == 3000.0
+    assert row["dc_load_power"] == 200.0
+
+
+def test_generator_report_skips_gaps_and_legacy_null_columns(client):
+    create_owner(client)
+    now = datetime.now(timezone.utc)
+    base = now - timedelta(seconds=13600)
+    # Spacings 900/900/10800/900 s: the median guard rejects the long hole.
+    # ac_in_power and dc_load_power are NULL (pre-migration rows); the genset
+    # total falls back to generator_power.
+    offsets = [0, 900, 1800, 12600, 13500]
+    with Session(sync_engine) as session:
+        for offset in offsets:
+            session.add(EnergySample(
+                recorded_at=base + timedelta(seconds=offset),
+                load_power=1000.0, ac_in_power=None, dc_load_power=None,
+                generator_power=3000.0))
+        # The generator split only integrates over run windows; without a run
+        # in range there is nothing to split.
+        session.add(GeneratorRun(
+            started_at=base, ended_at=base + timedelta(seconds=13500),
+            duration_seconds=13500.0, energy_kwh=8.5, peak_power_w=3050.0,
+            updated_at=base + timedelta(seconds=13500)))
+        session.commit()
+    data = client.get("/api/reports/generator", params={
+        "from": base.isoformat(), "to": now.isoformat(), "tz_offset_minutes": 0}).json()
+    energy = data["energy"]
+    assert energy["genset_kwh"] == round(3 * 3000 * 900 / 3_600_000, 4)
+    assert energy["ac_loads_kwh"] == round(3 * 1000 * 900 / 3_600_000, 4)
+    assert energy["dc_loads_kwh"] is None
+    assert energy["dc_loads_samples"] == 0
+    assert energy["charging_kwh"] == round(energy["genset_kwh"] - energy["ac_loads_kwh"], 4)
+    assert energy["total_in_samples"] == 5

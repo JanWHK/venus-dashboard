@@ -53,6 +53,8 @@ class EnergySample(Base):
     battery_power = Column(Float)
     battery_soc = Column(Float)
     generator_power = Column(Float)
+    ac_in_power = Column(Float)
+    dc_load_power = Column(Float)
 
 
 class BatteryAlertRule(Base):
@@ -148,6 +150,12 @@ async def init_db():
         ))
         await conn.execute(text(
             "ALTER TABLE energy_samples ADD COLUMN IF NOT EXISTS generator_power FLOAT"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE energy_samples ADD COLUMN IF NOT EXISTS ac_in_power FLOAT"
+        ))
+        await conn.execute(text(
+            "ALTER TABLE energy_samples ADD COLUMN IF NOT EXISTS dc_load_power FLOAT"
         ))
         await conn.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS ux_account_username ON dashboard_account (username)"

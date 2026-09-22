@@ -15,6 +15,7 @@ import BatteryAlerts from "./components/BatteryAlerts";
 const Dashboard = lazy(() => import("./components/Dashboard"));
 const Devices = lazy(() => import("./components/Devices"));
 const Settings = lazy(() => import("./components/Settings"));
+const Reports = lazy(() => import("./components/Reports"));
 
 function Workspace() {
   const [user, setUser] = useState(null);
@@ -80,6 +81,7 @@ function Workspace() {
             ["/", "overview", "Overview"],
             ["/devices", "devices", "Devices"],
             ["/history", "history", "Energy history"],
+            ["/reports", "reports", "Reports"],
             ["/settings", "settings", "Settings"],
           ].map(([to, icon, label]) => (
             <NavLink key={to} to={to} end>
@@ -182,6 +184,7 @@ function Workspace() {
                 path="/settings"
                 element={<Settings demo={demo} user={user} />}
               />
+              <Route path="/reports" element={<Reports demo={demo} />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>

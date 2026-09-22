@@ -50,6 +50,12 @@ const paths = {
       <path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5m4-1v5l3 2" />
     </>
   ),
+  reports: (
+    <>
+      <path d="M9 3h6v3H9zM7 5H6a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-1" />
+      <path d="M9 12h6M9 16h4" />
+    </>
+  ),
   settings: (
     <>
       <path d="M4 6h16M4 12h16M4 18h16" />

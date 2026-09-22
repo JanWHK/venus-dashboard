@@ -1,5 +1,6 @@
 """Helio browser regression tests. Default tests use only the explicit demo."""
 import os
+import re
 
 import pytest
 from playwright.sync_api import Page, expect
@@ -57,6 +58,25 @@ def test_demo_preferences_never_save_to_server(page: Page):
     page.get_by_role("button", name="Save preferences").click()
     expect(page.get_by_role("status")).to_have_text("Preview updated. Nothing saved.")
     assert writes == []
+
+
+def test_reports_tabs_ranges_and_split_labels(page: Page):
+    open_demo(page)
+    page.get_by_role("navigation", name="Main navigation").get_by_role("link", name="Reports", exact=True).click()
+    expect(page.get_by_role("heading", name="Reports.")).to_be_visible()
+    expect(page.locator(".gen-stat.total").first).to_contain_text("Total output")
+    expect(page.locator(".split-bar .seg-charging")).to_be_visible()
+    labels = page.locator(".split-labels span").all_inner_texts()
+    assert sum(int(re.sub(r"\D", "", label) or 0) for label in labels) == 100
+    for kind in ["Solar", "Consumption"]:
+        page.get_by_role("button", name=kind, exact=True).click()
+        expect(page.get_by_role("button", name=kind, exact=True)).to_have_attribute("aria-pressed", "true")
+    expect(page.locator(".generator-stats").first).to_contain_text("Grid import")
+    for label in ["7 days", "30 days", "90 days"]:
+        page.get_by_role("button", name=label, exact=True).click()
+        expect(page.get_by_role("button", name=label, exact=True)).to_have_attribute("aria-pressed", "true")
+    page.get_by_label("Start date").fill("2026-08-01")
+    expect(page.get_by_role("button", name="Custom")).to_have_attribute("aria-pressed", "true")
 
 
 @pytest.mark.parametrize("width", [320, 390, 768, 1440])
