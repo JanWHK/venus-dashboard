@@ -193,6 +193,21 @@ function RunsTable({ runs }) {
 
 const kWh = (value) => (value != null ? number(value, 2) : "—");
 
+// The GX aggregates always-on DC load (Dc/System) and updates it every
+// second live; summaries store a snapshot every 15 minutes, which captures
+// a constant DC load accurately — but only since 22 Sep 2026.
+function DcCoverageNote({ energy }) {
+  const baseline = energy.ac_loads_samples;
+  if (!baseline || energy.dc_loads_samples === baseline) return null;
+  return (
+    <p className="report-note">
+      {energy.dc_loads_samples === 0
+        ? "DC loads (GX) aren't in saved summaries before 22 Sep 2026 — until then the charging share includes them."
+        : `DC loads (GX) only started landing in saved summaries on 22 Sep 2026 — earlier days in this range don't include them (${number(energy.dc_loads_samples, 0)} of ${number(baseline, 0)} summaries carry it).`}
+    </p>
+  );
+}
+
 function GeneratorReport({ data, unit }) {
   const runs = data.runs;
   const energy = data.energy;
@@ -254,6 +269,7 @@ function GeneratorReport({ data, unit }) {
               </span>
             </div>
           </div>
+          <DcCoverageNote energy={energy} />
           <Tiles>
             <Tile
               total
@@ -269,9 +285,9 @@ function GeneratorReport({ data, unit }) {
               unit="kWh"
             />
             <Tile
-              label="DC loads"
+              label="DC loads (GX)"
               swatch="split-dc"
-              title="GX Dc/System aggregate"
+              title="GX Dc/System aggregate — updated every second live, stored in summaries every 15 minutes"
               value={kWh(energy.dc_loads_kwh)}
               unit="kWh"
             />
@@ -291,7 +307,7 @@ function GeneratorReport({ data, unit }) {
             total={energy.genset_kwh}
             segments={[
               { key: "seg-loads", label: "To AC loads", value: energy.ac_loads_kwh },
-              { key: "seg-dc", label: "DC loads", value: energy.dc_loads_kwh },
+              { key: "seg-dc", label: "DC loads (GX)", value: energy.dc_loads_kwh },
               {
                 key: "seg-charging",
                 label: "To battery charging",
@@ -299,12 +315,6 @@ function GeneratorReport({ data, unit }) {
               },
             ]}
           />
-          {energy.dc_loads_samples === 0 && (
-            <p className="report-note">
-              DC loads only land in saved summaries since 22 Sep 2026 — until then the
-              charging share absorbs them.
-            </p>
-          )}
         </section>
       ) : (
         <section className="panel">
@@ -370,6 +380,7 @@ function SolarReport({ data }) {
               </span>
             </div>
           </div>
+          <DcCoverageNote energy={energy} />
           <Tiles>
             <Tile total label="Total harvest" value={kWh(energy.generated_kwh)} unit="kWh" />
             <Tile
@@ -379,9 +390,9 @@ function SolarReport({ data }) {
               unit="kWh"
             />
             <Tile
-              label="DC loads"
+              label="DC loads (GX)"
               swatch="split-dc"
-              title="GX Dc/System aggregate"
+              title="GX Dc/System aggregate — updated every second live, stored in summaries every 15 minutes"
               value={kWh(energy.dc_loads_kwh)}
               unit="kWh"
             />
@@ -396,7 +407,7 @@ function SolarReport({ data }) {
             total={energy.generated_kwh}
             segments={[
               { key: "seg-loads", label: "To AC loads", value: energy.ac_loads_kwh },
-              { key: "seg-dc", label: "DC loads", value: energy.dc_loads_kwh },
+              { key: "seg-dc", label: "DC loads (GX)", value: energy.dc_loads_kwh },
               {
                 key: "seg-charging",
                 label: "To battery charging",
@@ -456,8 +467,8 @@ function ConsumptionReport({ data }) {
           <Tiles>
             <Tile total label="AC loads" value={kWh(energy.ac_loads_kwh)} unit="kWh" />
             <Tile
-              label="DC loads"
-              title="GX Dc/System aggregate"
+              label="DC loads (GX)"
+              title="GX Dc/System aggregate — updated every second live, stored in summaries every 15 minutes"
               value={kWh(energy.dc_loads_kwh)}
               unit="kWh"
             />
@@ -662,11 +673,17 @@ export default function Reports({ demo }) {
               newest 50,000. Narrow the range for exact totals.
             </p>
           )}
-          {kind === "generator" && <GeneratorReport data={data} unit={unit} />}
-          {kind === "solar" && <SolarReport data={data} />}
-          {kind === "consumption" && <ConsumptionReport data={data} />}
+          {data.kind === kind && kind === "generator" && (
+            <GeneratorReport data={data} unit={unit} />
+          )}
+          {data.kind === kind && kind === "solar" && <SolarReport data={data} />}
+          {data.kind === kind && kind === "consumption" && (
+            <ConsumptionReport data={data} />
+          )}
         </div>
-      ) : null}
+      ) : (
+        <div className="empty-state">Crunching your energy totals…</div>
+      )}
     </div>
   );
 }

@@ -72,6 +72,11 @@ def test_reports_tabs_ranges_and_split_labels(page: Page):
         page.get_by_role("button", name=kind, exact=True).click()
         expect(page.get_by_role("button", name=kind, exact=True)).to_have_attribute("aria-pressed", "true")
     expect(page.locator(".generator-stats").first).to_contain_text("Grid import")
+    # Round-trip back to Generator: only the matching payload may render.
+    page.get_by_role("button", name="Generator", exact=True).click()
+    expect(page.locator(".gen-stat.total").first).to_contain_text("Total output")
+    # Demo DC coverage is partial, so the coverage note shows.
+    expect(page.locator(".report-note").first).to_contain_text("DC loads (GX)")
     for label in ["7 days", "30 days", "90 days"]:
         page.get_by_role("button", name=label, exact=True).click()
         expect(page.get_by_role("button", name=label, exact=True)).to_have_attribute("aria-pressed", "true")
