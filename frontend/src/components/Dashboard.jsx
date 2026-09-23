@@ -391,19 +391,104 @@ function Battery({ metrics: m }) {
   );
 }
 
-function GeneratorPanel({ metrics: m, activeRun }) {
-  const unit = usePowerUnit();
-  if (m.ac_in_source !== "generator" || m.ac_in_power == null) return null;
-  const total = m.ac_in_power;
+// Splits an input (generator or array) into AC loads, battery charging and a
+// remainder. Charging is the battery's own (BMS) reading, capped to what the
+// input can cover after AC loads, and the remainder is DC loads plus
+// conversion losses. The GX Dc/System figure is deliberately not used here: it
+// is a residual of the DC bus that goes negative while the charger runs,
+// because the MultiPlus and the BMS disagree on DC power by a few hundred watts.
+function inputSplit(total, m) {
   const loads = m.load_power;
-  const dcLoads = m.dc_load_power;
-  // Battery charging is the remainder after AC and DC loads, keeping the
-  // identity exact: total in = AC loads + DC loads (GX) + battery charging.
-  const charging = Math.max(total - (loads ?? 0) - (dcLoads ?? 0), 0);
+  const available = Math.max(total - (loads ?? 0), 0);
+  const charging =
+    m.battery_power == null ? null : Math.min(Math.max(m.battery_power, 0), available);
+  const other = available - (charging ?? 0);
   const share = (value) =>
     value != null && total > 0 ? Math.min(Math.max((value / total) * 100, 0), 100) : null;
-  const loadsShare = share(loads);
-  const dcShare = share(dcLoads);
+  return { loads, charging, other, loadsShare: share(loads), chargingShare: share(charging) };
+}
+
+const OTHER_TITLE =
+  "What the input delivers beyond AC loads and battery charging: DC loads plus charger/inverter losses";
+
+function InputSplit({ label, totalLabel, total, metrics }) {
+  const unit = usePowerUnit();
+  const { loads, charging, other, loadsShare, chargingShare } = inputSplit(total, metrics);
+  const roundedLoads = loadsShare != null ? Math.round(loadsShare) : 0;
+  const roundedCharging = chargingShare != null ? Math.round(chargingShare) : 0;
+  return (
+    <>
+      <div className="generator-stats">
+        <div className="gen-stat total">
+          <span>{totalLabel}</span>
+          <strong>
+            {formatPower(total, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+        <div className="gen-stat">
+          <span>
+            <i className="split-swatch split-loads" />
+            To AC loads
+          </span>
+          <strong>
+            {formatPower(loads, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+        <div className="gen-stat">
+          <span title="Battery charge power as reported by the battery's BMS">
+            <i className="split-swatch split-charging" />
+            To battery charging
+          </span>
+          <strong>
+            {formatPower(charging, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+        <div className="gen-stat">
+          <span title={OTHER_TITLE}>
+            <i className="split-swatch split-dc" />
+            DC loads + losses
+          </span>
+          <strong>
+            {formatPower(other, unit)} <small>{unit}</small>
+          </strong>
+        </div>
+      </div>
+      <div
+        className="split-bar"
+        role="img"
+        aria-label={`${label} ${formatPower(total, unit)} ${unit}: AC loads ${formatPower(loads, unit)} ${unit}, battery charging ${formatPower(charging, unit)} ${unit}, DC loads and losses ${formatPower(other, unit)} ${unit}`}
+      >
+        {loadsShare != null && (
+          <span
+            className="seg-loads"
+            style={{ width: `${loadsShare}%` }}
+            title={`To AC loads: ${formatPower(loads, unit)} ${unit}`}
+          />
+        )}
+        {chargingShare != null && (
+          <span
+            className="seg-charging"
+            style={{ width: `${chargingShare}%` }}
+            title={`To battery charging: ${formatPower(charging, unit)} ${unit}`}
+          />
+        )}
+        <span
+          className="seg-dc"
+          style={{ flexGrow: 1 }}
+          title={`DC loads + losses: ${formatPower(other, unit)} ${unit}`}
+        />
+      </div>
+      <div className="split-labels" aria-hidden="true">
+        {loadsShare != null && <span style={{ width: `${loadsShare}%` }}>{roundedLoads}%</span>}
+        {chargingShare != null && <span style={{ width: `${chargingShare}%` }}>{roundedCharging}%</span>}
+        <span style={{ flexGrow: 1 }}>{Math.max(0, 100 - roundedLoads - roundedCharging)}%</span>
+      </div>
+    </>
+  );
+}
+
+function GeneratorPanel({ metrics: m, activeRun }) {
+  if (m.ac_in_source !== "generator" || m.ac_in_power == null) return null;
   return (
     <section className="panel generator-panel">
       <div className="panel-heading">
@@ -421,91 +506,14 @@ function GeneratorPanel({ metrics: m, activeRun }) {
           {activeRun ? `Running since ${clock(activeRun.started_at)}` : "Feeding the inverter"}
         </span>
       </div>
-      <div className="generator-stats">
-        <div className="gen-stat total">
-          <span>Total in</span>
-          <strong>
-            {formatPower(total, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-        <div className="gen-stat">
-          <span>
-            <i className="split-swatch split-loads" />
-            To AC loads
-          </span>
-          <strong>
-            {formatPower(loads, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-        <div className="gen-stat">
-          <span title="GX-computed DC system indication (Dc/System) — not a meter, swings by a couple hundred watts">
-            <i className="split-swatch split-dc" />
-            DC loads (GX)
-          </span>
-          <strong>
-            {formatPower(dcLoads, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-        <div className="gen-stat">
-          <span>
-            <i className="split-swatch split-charging" />
-            To battery charging
-          </span>
-          <strong>
-            {formatPower(charging, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-      </div>
-      <div
-        className="split-bar"
-        role="img"
-        aria-label={`Generator input ${formatPower(total, unit)} ${unit}: AC loads ${formatPower(loads, unit)} ${unit}, DC loads ${formatPower(dcLoads, unit)} ${unit}, battery charging ${formatPower(charging, unit)} ${unit}`}
-      >
-        {loadsShare != null && (
-          <span
-            className="seg-loads"
-            style={{ width: `${loadsShare}%` }}
-            title={`To AC loads: ${formatPower(loads, unit)} ${unit}`}
-          />
-        )}
-        {dcShare != null && (
-          <span
-            className="seg-dc"
-            style={{ width: `${dcShare}%` }}
-            title={`DC loads (GX indication): ${formatPower(dcLoads, unit)} ${unit}`}
-          />
-        )}
-        <span
-          className="seg-charging"
-          style={{ flexGrow: 1 }}
-          title={`To battery charging: ${formatPower(charging, unit)} ${unit}`}
-        />
-      </div>
-      <div className="split-labels" aria-hidden="true">
-        {loadsShare != null && <span style={{ width: `${loadsShare}%` }}>{Math.round(loadsShare)}%</span>}
-        {dcShare != null && <span style={{ width: `${dcShare}%` }}>{Math.round(dcShare)}%</span>}
-        <span style={{ flexGrow: 1 }}>
-          {Math.max(0, 100 - (loadsShare != null ? Math.round(loadsShare) : 0) - (dcShare != null ? Math.round(dcShare) : 0))}%
-        </span>
-      </div>
+      <InputSplit label="Generator input" totalLabel="Total in" total={m.ac_in_power} metrics={m} />
     </section>
   );
 }
 
 function SolarPanel({ metrics: m }) {
-  const unit = usePowerUnit();
   // Same visibility rule as the sun/moon icon: hidden while idle or dark.
   if (m.solar_power == null || m.solar_power <= 0) return null;
-  const total = m.solar_power;
-  const loads = m.load_power;
-  const dcLoads = m.dc_load_power;
-  // Same remainder identity as the generator panel: the array covers AC and
-  // DC loads first, and whatever is left charges the battery.
-  const charging = Math.max(total - (loads ?? 0) - (dcLoads ?? 0), 0);
-  const share = (value) =>
-    value != null && total > 0 ? Math.min(Math.max((value / total) * 100, 0), 100) : null;
-  const loadsShare = share(loads);
-  const dcShare = share(dcLoads);
   return (
     <section className="panel generator-panel">
       <div className="panel-heading">
@@ -523,73 +531,7 @@ function SolarPanel({ metrics: m }) {
           Harvesting sunshine
         </span>
       </div>
-      <div className="generator-stats">
-        <div className="gen-stat total">
-          <span>Total harvest</span>
-          <strong>
-            {formatPower(total, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-        <div className="gen-stat">
-          <span>
-            <i className="split-swatch split-loads" />
-            To AC loads
-          </span>
-          <strong>
-            {formatPower(loads, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-        <div className="gen-stat">
-          <span title="GX-computed DC system indication (Dc/System) — not a meter, swings by a couple hundred watts">
-            <i className="split-swatch split-dc" />
-            DC loads (GX)
-          </span>
-          <strong>
-            {formatPower(dcLoads, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-        <div className="gen-stat">
-          <span>
-            <i className="split-swatch split-charging" />
-            To battery charging
-          </span>
-          <strong>
-            {formatPower(charging, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-      </div>
-      <div
-        className="split-bar"
-        role="img"
-        aria-label={`Solar harvest ${formatPower(total, unit)} ${unit}: AC loads ${formatPower(loads, unit)} ${unit}, DC loads ${formatPower(dcLoads, unit)} ${unit}, battery charging ${formatPower(charging, unit)} ${unit}`}
-      >
-        {loadsShare != null && (
-          <span
-            className="seg-loads"
-            style={{ width: `${loadsShare}%` }}
-            title={`To AC loads: ${formatPower(loads, unit)} ${unit}`}
-          />
-        )}
-        {dcShare != null && (
-          <span
-            className="seg-dc"
-            style={{ width: `${dcShare}%` }}
-            title={`DC loads (GX indication): ${formatPower(dcLoads, unit)} ${unit}`}
-          />
-        )}
-        <span
-          className="seg-charging"
-          style={{ flexGrow: 1 }}
-          title={`To battery charging: ${formatPower(charging, unit)} ${unit}`}
-        />
-      </div>
-      <div className="split-labels" aria-hidden="true">
-        {loadsShare != null && <span style={{ width: `${loadsShare}%` }}>{Math.round(loadsShare)}%</span>}
-        {dcShare != null && <span style={{ width: `${dcShare}%` }}>{Math.round(dcShare)}%</span>}
-        <span style={{ flexGrow: 1 }}>
-          {Math.max(0, 100 - (loadsShare != null ? Math.round(loadsShare) : 0) - (dcShare != null ? Math.round(dcShare) : 0))}%
-        </span>
-      </div>
+      <InputSplit label="Solar harvest" totalLabel="Total harvest" total={m.solar_power} metrics={m} />
     </section>
   );
 }
