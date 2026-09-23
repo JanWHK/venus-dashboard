@@ -29,6 +29,16 @@ def test_demo_has_explicit_sample_label_and_energy_flow(page: Page):
 
 def test_chart_controls(page: Page):
     open_demo(page)
+    battery = page.get_by_role("button", name="Battery level", exact=True)
+    expect(battery).to_have_attribute("aria-pressed", "true")
+    expect(page.locator(".recharts-line path.recharts-curve")).to_be_visible()
+    expect(page.locator(".recharts-yAxis")).to_have_count(2)
+    expect(page.locator(".recharts-yAxis").last).to_contain_text("100%")
+    battery.click()
+    expect(battery).to_have_attribute("aria-pressed", "false")
+    expect(page.locator(".recharts-line path.recharts-curve")).to_have_count(0)
+    battery.click()
+    expect(battery).to_have_attribute("aria-pressed", "true")
     solar = page.get_by_role("button", name="Solar", exact=True)
     solar.click()
     expect(solar).to_have_attribute("aria-pressed", "false")

@@ -2,8 +2,9 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Area,
-  AreaChart,
   CartesianGrid,
+  ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -137,6 +138,7 @@ export const CHART_COLORS = {
     load_power: "#2e8c6a",
     grid_power: "#8c98a4",
     generator_power: "#7a5fa0",
+    battery_soc: "#d26458",
     gridStroke: "#e9ece6",
     tick: "#849089",
     tooltipBorder: "#dfe5dc",
@@ -146,6 +148,7 @@ export const CHART_COLORS = {
     load_power: "#3fa184",
     grid_power: "#8fa39a",
     generator_power: "#9484e0",
+    battery_soc: "#f18a7e",
     gridStroke: "#2b3630",
     tick: "#8b968f",
     tooltipBorder: "#33403a",
@@ -604,6 +607,7 @@ function EnergyChart({ liveData, demo, historyOnly }) {
     load_power: true,
     grid_power: false,
     generator_power: true,
+    battery_soc: true,
   });
   useEffect(() => {
     if (range === "live" || demo) return;
@@ -633,16 +637,18 @@ function EnergyChart({ liveData, demo, historyOnly }) {
   }, [range, demo]);
   const rows = range === "live" || demo ? liveData?.history || [] : stored;
   const hasData = rows.some((row) =>
-    ["solar_power", "load_power", "grid_power", "generator_power"].some(
+    ["solar_power", "load_power", "grid_power", "generator_power", "battery_soc"].some(
       (key) => row[key] != null,
     ),
   );
+  const hasBatteryData = rows.some((row) => row.battery_soc != null);
   const series = [
     ["solar_power", "Solar", colors.solar_power],
     ["load_power", "Consumption", colors.load_power],
     ["grid_power", "Grid", colors.grid_power],
     ["generator_power", "Generator", colors.generator_power],
   ];
+  const legendSeries = [...series, ["battery_soc", "Battery level", colors.battery_soc]];
   return (
     <section className="panel chart-panel">
       <div className="panel-heading">
@@ -668,7 +674,7 @@ function EnergyChart({ liveData, demo, historyOnly }) {
         </div>
       </div>
       <div className="chart-legend">
-        {series.map(([key, label, color]) => (
+        {legendSeries.map(([key, label, color]) => (
           <button
             key={key}
             aria-pressed={visible[key]}
@@ -720,9 +726,9 @@ function EnergyChart({ liveData, demo, historyOnly }) {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
+            <ComposedChart
               data={rows}
-              margin={{ top: 12, right: 5, left: -22, bottom: 0 }}
+              margin={{ top: 12, right: 0, left: -22, bottom: 0 }}
             >
               <defs>
                 {series.map(([key, , color]) => (
@@ -758,14 +764,31 @@ function EnergyChart({ liveData, demo, historyOnly }) {
                 minTickGap={45}
               />
               <YAxis
+                yAxisId="power"
                 tickFormatter={(v) => formatPower(v, unit, 1)}
                 tick={{ fontSize: 10, fill: colors.tick }}
                 axisLine={false}
                 tickLine={false}
               />
+              {visible.battery_soc && hasBatteryData && (
+                <YAxis
+                  yAxisId="battery"
+                  orientation="right"
+                  domain={[0, 100]}
+                  ticks={[0, 25, 50, 75, 100]}
+                  tickFormatter={(v) => `${v}%`}
+                  tick={{ fontSize: 10, fill: colors.battery_soc }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={36}
+                />
+              )}
               <Tooltip
                 labelFormatter={(v) => new Date(v).toLocaleString()}
-                formatter={(v, name) => [`${formatPower(v, unit, 2)} ${unit}`, name]}
+                formatter={(v, name) => [
+                  name === "Battery level" ? `${number(v, 0)}%` : `${formatPower(v, unit, 2)} ${unit}`,
+                  name,
+                ]}
                 contentStyle={{
                   borderRadius: 12,
                   border: `1px solid ${colors.tooltipBorder}`,
@@ -782,6 +805,7 @@ function EnergyChart({ liveData, demo, historyOnly }) {
                     type="monotone"
                     dataKey={key}
                     name={label}
+                    yAxisId="power"
                     stroke={color}
                     fill={`url(#gradient-${key})`}
                     strokeWidth={2}
@@ -789,7 +813,20 @@ function EnergyChart({ liveData, demo, historyOnly }) {
                     connectNulls={false}
                   />
                 ))}
-            </AreaChart>
+              {visible.battery_soc && hasBatteryData && (
+                <Line
+                  type="monotone"
+                  dataKey="battery_soc"
+                  name="Battery level"
+                  yAxisId="battery"
+                  stroke={colors.battery_soc}
+                  strokeWidth={2.5}
+                  dot={false}
+                  isAnimationActive={false}
+                  connectNulls={false}
+                />
+              )}
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </div>
