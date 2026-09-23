@@ -46,22 +46,25 @@ If Postgres auth fails after redeployment, exec into `venus-db` and run:
   genset power and the `Timers/TimeOnGenerator` counter; each run lands in
   `generator_runs` with exact duration, kWh and peak W (power telemetry works since
   2026-09-21). While the generator feeds, the UI shows a **Generator input** panel:
-  total in = AC loads + DC loads (GX) + battery charging, where charging is the
-  remainder so the identity is exact; the split bar carries percentage labels that
-  always sum to 100 %.
+  total in = AC loads + battery charging + DC loads & losses. Charging is the BMS
+  `battery_power` (capped to what the input covers after AC loads) and "DC loads +
+  losses" is the remainder, so the identity is exact; the split bar carries
+  percentage labels that always sum to 100 %. The GX `Dc/System/Power` is **not**
+  used here — it goes negative (−250…−500 W) while the charger runs (verified
+  2026-09-23), because the MultiPlus and BMS disagree on DC power.
 - **Solar input panel** (2026-09-22, commit `a38419f`) — same split construction for
-  the array while `solar_power > 0`: Total harvest = AC loads + DC loads + charging
-  (remainder). Same segment colors as the generator panel (same destinations);
+  the array while `solar_power > 0`: Total harvest = AC loads + charging (BMS) +
+  DC loads & losses (remainder). Same segment colors as the generator panel (same destinations);
   heading shows PV V · A; hidden at night, matching the sun/moon icon rule. During a
-  rare solar + genset overlap each panel's "charging" remainder includes both charge
-  sources — acceptable, they are displays, not metering.
+  rare solar + genset overlap the BMS charge figure covers both sources, so each
+  panel caps it at its own input — acceptable, they are displays, not metering.
 - `system/0/Ac/Consumption/L1/Power` ≡ vebus `Ac/Out/L1/P` (Home consumption = AC out).
-  `Dc/System/Power` is a noisy GX DC aggregate (swings a few hundred W) — it feeds the
-  panel's DC-loads line, so expect the tile to wobble. Verified 2026-09-22: it is a
+  `Dc/System/Power` is a noisy GX DC aggregate (swings a few hundred W) — it still
+  feeds the Reports DC-loads totals and the DC tile, but no longer the live input
+  panels. Verified 2026-09-22: it is a
   GX-calculated residual of the DC bus (PV − inverter − battery), published with
   `MeasurementType 0` (= indication, not metered); the real constant DC load reads
-  ~120 W (2.3 A). A blip there reshuffles the split between DC and charging but
-  never changes the totals.
+  ~120 W (2.3 A).
 - Genset output is not instantaneous either (swings ~500 W between 15 s samples); the
   AC-in ≈ loads + battery + DC + inverter-losses identity holds to ~4–6 %.
 
