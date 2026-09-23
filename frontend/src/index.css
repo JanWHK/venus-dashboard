@@ -2444,12 +2444,45 @@ input {
   .report-date-inputs {
     flex-wrap: wrap;
   }
+  .report-table-scroll {
+    overflow-x: visible;
+  }
   .report-table {
+    display: block;
     font-size: 13px;
   }
-  .report-table th,
+  .report-table thead {
+    display: none;
+  }
+  .report-table tbody {
+    display: block;
+  }
+  .report-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .report-table tbody tr:last-child {
+    border-bottom: none;
+  }
   .report-table td {
-    padding: 8px 8px;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+    padding: 0;
+    border: none;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  .report-table td::before {
+    content: attr(data-label);
+    color: var(--text-soft);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 }
 .avatar-inline {

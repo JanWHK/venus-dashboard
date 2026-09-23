@@ -294,6 +294,61 @@ def test_generator_report_totals(client):
     assert row["dc_load_power"] == 200.0
 
 
+def test_completed_generator_run_updates_its_active_row(client):
+    create_owner(client)
+    start = datetime.now(timezone.utc) - timedelta(seconds=1500)
+    active = {
+        "started_at": start.timestamp(), "duration_base": None,
+        "duration_seconds": None, "energy_wh": 1300.0,
+        "power_seen": True, "peak_w": 3100.0,
+    }
+    with main.collector.lock:
+        previous_run = main.collector.generator_run
+        previous_finished = list(main.collector.generator_runs)
+        main.collector.generator_runs.clear()
+        main.collector.generator_run = active
+    try:
+        client.portal.call(main.persist_generator_runs)
+        with main.collector.lock:
+            main.collector.generator_run = None
+            main.collector.generator_runs.append({
+                **active, "duration_seconds": 1500.0,
+                "ended_at": datetime.now(timezone.utc).timestamp(),
+            })
+        client.portal.call(main.persist_generator_runs)
+        with Session(sync_engine) as session:
+            rows = session.query(GeneratorRun).all()
+            assert len(rows) == 1
+            assert rows[0].ended_at is not None
+            assert rows[0].duration_seconds == 1500.0
+            assert rows[0].energy_kwh == 1.3
+    finally:
+        with main.collector.lock:
+            main.collector.generator_run = previous_run
+            main.collector.generator_runs.clear()
+            main.collector.generator_runs.extend(previous_finished)
+
+
+def test_generator_report_collapses_existing_duplicate_runs(client):
+    create_owner(client)
+    start = datetime.now(timezone.utc) - timedelta(hours=2)
+    with Session(sync_engine) as session:
+        for duration in (6900.0, 7200.0):
+            session.add(GeneratorRun(
+                started_at=start, ended_at=start + timedelta(seconds=duration),
+                duration_seconds=duration, energy_kwh=8.04,
+                peak_power_w=3560.0, updated_at=start + timedelta(seconds=duration)))
+        session.commit()
+    data = client.get("/api/reports/generator").json()
+    assert data["runs"]["count"] == 1
+    assert data["runs"]["energy_kwh"] == 8.04
+    assert data["runs"]["total_duration_seconds"] == 7200.0
+    assert len(data["run_list"]) == 1
+    assert data["daily"][0]["runs"] == 1
+    assert data["daily"][0]["energy_kwh"] == 8.04
+    assert len(client.get("/api/live").json()["generator_runs"]["recent"]) == 1
+
+
 def test_generator_report_skips_gaps_and_legacy_null_columns(client):
     create_owner(client)
     now = datetime.now(timezone.utc)

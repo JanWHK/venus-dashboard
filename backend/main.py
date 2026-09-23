@@ -54,11 +54,21 @@ def run_row_values(run, ended=False):
 async def persist_generator_runs():
     async with SessionLocal() as session:
         for run in collector.drain_generator_runs():
-            session.add(GeneratorRun(
-                started_at=datetime.fromtimestamp(run["started_at"], timezone.utc),
-                ended_at=datetime.fromtimestamp(run["ended_at"], timezone.utc),
-                **run_row_values(run, ended=True),
-            ))
+            started_at = datetime.fromtimestamp(run["started_at"], timezone.utc)
+            ended_at = datetime.fromtimestamp(run["ended_at"], timezone.utc)
+            values = run_row_values(run, ended=True)
+            existing = (await session.execute(
+                select(GeneratorRun)
+                .where(GeneratorRun.started_at == started_at)
+                .order_by(GeneratorRun.id.desc())
+                .limit(1)
+            )).scalar_one_or_none()
+            if existing is None:
+                session.add(GeneratorRun(started_at=started_at, ended_at=ended_at, **values))
+            else:
+                existing.ended_at = ended_at
+                for key, value in values.items():
+                    setattr(existing, key, value)
         active = collector.generator_run
         row = (await session.execute(
             select(GeneratorRun).where(GeneratorRun.ended_at.is_(None))
@@ -170,7 +180,7 @@ def run_payload(row):
 async def live():
     async with SessionLocal() as session:
         rows = (await session.execute(
-            select(GeneratorRun).order_by(GeneratorRun.started_at.desc()).limit(3)
+            select(GeneratorRun).order_by(GeneratorRun.started_at.desc()).limit(30)
         )).scalars().all()
     active = collector.generator_run
     active_run = None
@@ -182,7 +192,7 @@ async def live():
         active_run.pop("updated_at", None)
     return {**collector.snapshot(), "history": list(live_history), "recording_interval": recording_interval,
             "generator_runs": {"active_run": active_run,
-                               "recent": [run_payload(row) for row in rows]}}
+                               "recent": [run_payload(row) for row in reports.unique_runs(rows)[:3]]}}
 
 
 @app.get("/api/devices", dependencies=[Depends(require_user)])
