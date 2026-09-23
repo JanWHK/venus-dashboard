@@ -118,6 +118,22 @@ def run_payload(row):
     }
 
 
+def unique_runs(runs):
+    """Collapse old duplicate rows from runs saved once active and once finished."""
+    by_start = {}
+    for run in runs:
+        previous = by_start.get(run.started_at)
+        if previous is None or (
+            run.duration_seconds if run.duration_seconds is not None else -1,
+            run.energy_kwh is not None,
+        ) > (
+            previous.duration_seconds if previous.duration_seconds is not None else -1,
+            previous.energy_kwh is not None,
+        ):
+            by_start[run.started_at] = run
+    return sorted(by_start.values(), key=lambda run: run.started_at, reverse=True)
+
+
 def run_stats(runs):
     durations = [run.duration_seconds or 0.0 for run in runs]
     known = [run.energy_kwh for run in runs if run.energy_kwh is not None]
@@ -187,6 +203,7 @@ async def report(kind: str,
             .order_by(GeneratorRun.started_at.desc())
         )).scalars().all()
 
+    runs = unique_runs(runs)
     complete = len(samples) > SAMPLE_CAP
     samples = samples[:SAMPLE_CAP]
     times = [row.recorded_at.timestamp() for row in samples]

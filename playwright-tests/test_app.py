@@ -94,6 +94,18 @@ def test_reports_tabs_ranges_and_split_labels(page: Page):
     expect(page.get_by_role("button", name="Custom")).to_have_attribute("aria-pressed", "true")
 
 
+def test_report_run_log_fits_phone_width(page: Page):
+    page.set_viewport_size({"width": 320, "height": 900})
+    open_demo(page)
+    page.get_by_role("navigation", name="Main navigation").get_by_role("link", name="Reports", exact=True).click()
+    table = page.locator(".report-table-scroll")
+    expect(table.locator("td[data-label='Peak output']").first).to_be_visible()
+    assert table.evaluate("element => element.scrollWidth <= element.clientWidth")
+    assert table.locator("td[data-label='Peak output']").first.evaluate(
+        "element => element.getBoundingClientRect().right <= element.closest('.report-table-scroll').getBoundingClientRect().right"
+    )
+
+
 @pytest.mark.parametrize("width", [320, 390, 768, 1440])
 def test_responsive_layout_and_exit(page: Page, width):
     page.set_viewport_size({"width": width, "height": 900})

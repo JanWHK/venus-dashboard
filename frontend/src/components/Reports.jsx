@@ -175,12 +175,12 @@ function RunsTable({ runs }) {
         <tbody>
           {runs.map((run) => (
             <tr key={run.started_at}>
-              <td>{fullDate(run.started_at)}</td>
-              <td>{formatDuration(run.duration_seconds) ?? "—"}</td>
-              <td>
+              <td data-label="Start">{fullDate(run.started_at)}</td>
+              <td data-label="Duration">{formatDuration(run.duration_seconds) ?? "—"}</td>
+              <td data-label="Energy">
                 {run.energy_kwh != null ? `${number(run.energy_kwh, 2)} kWh` : "—"}
               </td>
-              <td>
+              <td data-label="Peak output">
                 {run.peak_power_w != null ? `${number(run.peak_power_w, 0)} W` : "—"}
               </td>
             </tr>
