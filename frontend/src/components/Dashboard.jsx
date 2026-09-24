@@ -14,6 +14,7 @@ import { api } from "../api";
 import { demoSnapshot } from "../demo";
 import { formatPower, setPowerUnit, usePowerUnit } from "../units";
 import Icon from "./Icon";
+import FuelPlanner from "./FuelPlanner";
 
 export const number = (value, decimals = 1) =>
   typeof value === "number" && Number.isFinite(value)
@@ -919,6 +920,7 @@ export default function Dashboard({ demo, historyOnly = false }) {
           </div>
           <SolarPanel metrics={m} />
           <GeneratorPanel metrics={m} activeRun={data?.generator_runs?.active_run} />
+          {!demo && <FuelPlanner liveData={data} />}
           <SystemUsePanel metrics={m} />
           <div className="energy-grid">
             <Flow metrics={m} live={live} activeRun={data?.generator_runs?.active_run} />
