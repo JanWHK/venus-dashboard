@@ -2266,6 +2266,10 @@ input {
 .generator-panel {
   margin-bottom: 27px;
 }
+.status-pill.is-warning {
+  color: var(--danger);
+  border-color: var(--danger);
+}
 .gen-supply {
   display: block;
   margin-top: 3px;
@@ -2277,6 +2281,21 @@ input {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   margin: 4px 0 18px;
+}
+.system-use-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.system-use-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-soft);
+}
+.system-use-panel > .gen-supply {
+  margin-top: 12px;
 }
 .gen-stat span {
   display: flex;
@@ -2351,7 +2370,8 @@ input {
   background: #b9853f;
 }
 @media (max-width: 760px) {
-  .generator-stats {
+  .generator-stats,
+  .system-use-stats {
     grid-template-columns: 1fr;
     gap: 10px;
   }

@@ -181,6 +181,33 @@ def test_live_genset_power_marks_input_as_generator_even_on_grid_slot():
     assert metrics["ac_in_power"] == 3201
 
 
+def test_configured_generator_source_and_disconnected_input_during_solar():
+    collector = LiveCollector()
+    collector.connected = True
+    send(collector, "system/0/Ac/In/0/Source", 2)
+    send(collector, "vebus/1/Ac/ActiveIn/ActiveInput", 0)
+    send(collector, "vebus/1/Ac/ActiveIn/Connected", 1)
+    send(collector, "vebus/1/Ac/ActiveIn/L1/P", 3064)
+    send(collector, "system/0/Dc/Pv/Power", 850)
+    send(collector, "system/0/Dc/System/Power", 540)
+    metrics = collector.snapshot()["metrics"]
+    assert metrics["ac_in_source"] == "generator"
+    assert metrics["ac_in_configured_source"] == "generator"
+    assert metrics["ac_in_connected"] is True
+    assert metrics["ac_in_power"] == 3064
+    assert metrics["solar_power"] == 850
+    assert metrics["dc_load_power"] == 540
+    assert metrics["grid_power"] is None
+
+    send(collector, "vebus/1/Ac/ActiveIn/ActiveInput", 240)
+    send(collector, "vebus/1/Ac/ActiveIn/Connected", 0)
+    metrics = collector.snapshot()["metrics"]
+    assert metrics["ac_in_source"] is None
+    assert metrics["ac_in_configured_source"] == "generator"
+    assert metrics["ac_in_connected"] is False
+    assert metrics["ac_in_power"] is None
+
+
 def seed_at(collector, path, value, at):
     collector.values[f"system/0/{path}"] = {"value": value, "at": at}
 

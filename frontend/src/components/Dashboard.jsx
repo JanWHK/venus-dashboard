@@ -30,12 +30,11 @@ const batteryState = (value) =>
       : value < -20
         ? "Discharging"
         : "Idle";
-// Power the generator is feeding into the MultiPlus: genset telemetry when
-// it exists, otherwise the AC-in reading while input 2 (generator) is active.
+// Show power delivered to the MultiPlus only while it accepts the AC input.
 const generatorFeed = (m) =>
-  m.ac_in_source === "generator"
-    ? m.generator_power ?? m.ac_in_power
-    : m.generator_power;
+  m.ac_in_source === "generator" && m.ac_in_connected !== false
+    ? m.ac_in_power
+    : null;
 const GENERATOR_STATES = {
   0: "Stopped",
   1: "Running",
@@ -178,7 +177,7 @@ function MetricCard({ icon, title, value, detail, tone, trend }) {
   );
 }
 
-function Flow({ metrics: m, live }) {
+function Flow({ metrics: m, live, activeRun }) {
   const unit = usePowerUnit();
   const genOut = generatorFeed(m);
   const flow = (v, reverse = false) =>
@@ -246,21 +245,25 @@ function Flow({ metrics: m, live }) {
             <Icon name="grid" size={24} />
           </span>
           <div>
-            <span>{m.ac_in_source === "generator" ? "AC input" : "Grid connection"}</span>
+            <span>Grid connection</span>
             <strong>
               {formatPower(m.grid_power, unit)} <small>{unit}</small>
             </strong>
           </div>
           <span className="node-caption">
-            {m.ac_in_voltage > 0
-              ? `${number(m.ac_in_voltage)} V · ${number(m.ac_in_frequency)} Hz`
-              : m.grid_power == null
-                ? "No reading yet"
-                : m.grid_power < -20
-                  ? "Exporting to grid"
-                  : m.grid_power > 20
-                    ? "Importing from grid"
-                    : "No grid exchange"}
+            {m.ac_in_source === "generator" || m.ac_in_configured_source === "generator"
+              ? "Generator uses AC input"
+              : m.ac_in_connected === false
+                ? "AC input disconnected"
+                : m.ac_in_voltage > 0
+                  ? `${number(m.ac_in_voltage)} V · ${number(m.ac_in_frequency)} Hz`
+                  : m.grid_power == null
+                    ? "No reading yet"
+                    : m.grid_power < -20
+                      ? "Exporting to grid"
+                      : m.grid_power > 20
+                        ? "Importing from grid"
+                        : "No grid exchange"}
           </span>
         </div>
         <div className="flow-node generator-node">
@@ -274,10 +277,14 @@ function Flow({ metrics: m, live }) {
             </strong>
           </div>
           <span className="node-caption">
-            {m.ac_in_source === "generator" && m.ac_in_voltage > 0
+            {activeRun && m.ac_in_connected === false
+              ? "Running · AC input disconnected"
+              : m.ac_in_source === "generator" && m.ac_in_voltage > 0
               ? `${number(m.ac_in_voltage)} V · ${number(m.ac_in_frequency)} Hz`
-              : generatorState(m.generator_state) ??
-                (m.generator_runtime != null ? "Not reported" : "No reading yet")}
+              : activeRun
+                ? "Running · no accepted input"
+                : generatorState(m.generator_state) ??
+                  (m.generator_runtime != null ? "Not reported" : "No reading yet")}
           </span>
         </div>
         <div className="flow-core">
@@ -391,127 +398,95 @@ function Battery({ metrics: m }) {
   );
 }
 
-// Splits an input (generator or array) into AC loads, battery charging and a
-// remainder. Charging is the battery's own (BMS) reading, capped to what the
-// input can cover after AC loads, and the remainder is DC loads plus
-// conversion losses. The GX Dc/System figure is deliberately not used here: it
-// is a residual of the DC bus that goes negative while the charger runs,
-// because the MultiPlus and the BMS disagree on DC power by a few hundred watts.
-function inputSplit(total, m) {
-  const loads = m.load_power;
-  const available = Math.max(total - (loads ?? 0), 0);
-  const charging =
-    m.battery_power == null ? null : Math.min(Math.max(m.battery_power, 0), available);
-  const other = available - (charging ?? 0);
-  const share = (value) =>
-    value != null && total > 0 ? Math.min(Math.max((value / total) * 100, 0), 100) : null;
-  return { loads, charging, other, loadsShare: share(loads), chargingShare: share(charging) };
-}
-
-const OTHER_TITLE =
-  "What the input delivers beyond AC loads and battery charging: DC loads plus charger/inverter losses";
-
-function InputSplit({ label, totalLabel, total, metrics }) {
+// These are system-wide readings. No meter attributes AC or DC demand to an
+// individual source when solar, generator and battery overlap. The GX DC
+// value is a computed residual and can be negative, so only positive values
+// contribute to the percentage bar while the signed reading remains visible.
+function SystemUsePanel({ metrics: m }) {
   const unit = usePowerUnit();
-  const { loads, charging, other, loadsShare, chargingShare } = inputSplit(total, metrics);
-  const roundedLoads = loadsShare != null ? Math.round(loadsShare) : 0;
-  const roundedCharging = chargingShare != null ? Math.round(chargingShare) : 0;
+  const outputs = [
+    { key: "loads", label: "AC loads", value: m.load_power, color: "seg-loads" },
+    { key: "dc", label: "DC (GX)", value: m.dc_load_power, color: "seg-dc" },
+    { key: "charging", label: "Battery charging", tileLabel: m.battery_power < 0 ? "Battery discharging" : "Battery charging", value: m.battery_power, color: "seg-charging" },
+  ];
+  if (outputs.every(({ value }) => value == null)) return null;
+  const positive = outputs.map(({ value }) => Math.max(value ?? 0, 0));
+  const total = positive.reduce((sum, value) => sum + value, 0);
+  const shares = positive.map((value) => (total > 0 ? (value / total) * 100 : 0));
+  const rounded = shares.map((share) => Math.floor(share));
+  const byRemainder = shares.map((share, index) => ({ index, fraction: share - rounded[index] }))
+    .sort((a, b) => b.fraction - a.fraction);
+  if (total > 0) {
+    const remaining = 100 - rounded.reduce((sum, value) => sum + value, 0);
+    for (let i = 0; i < remaining; i += 1) {
+      rounded[byRemainder[i].index] += 1;
+    }
+  }
   return (
-    <>
-      <div className="generator-stats">
-        <div className="gen-stat total">
-          <span>{totalLabel}</span>
-          <strong>
-            {formatPower(total, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-        <div className="gen-stat">
-          <span>
-            <i className="split-swatch split-loads" />
-            To AC loads
-          </span>
-          <strong>
-            {formatPower(loads, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-        <div className="gen-stat">
-          <span title="Battery charge power as reported by the battery's BMS">
-            <i className="split-swatch split-charging" />
-            To battery charging
-          </span>
-          <strong>
-            {formatPower(charging, unit)} <small>{unit}</small>
-          </strong>
-        </div>
-        <div className="gen-stat">
-          <span title={OTHER_TITLE}>
-            <i className="split-swatch split-dc" />
-            DC loads + losses
-          </span>
-          <strong>
-            {formatPower(other, unit)} <small>{unit}</small>
-          </strong>
+    <section className="panel generator-panel system-use-panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">SYSTEM-WIDE POWER USE</span>
+          <h2>Where power goes.</h2>
+          <span className="gen-supply">One mix for the whole system, even while solar and generator overlap.</span>
         </div>
       </div>
-      <div
-        className="split-bar"
-        role="img"
-        aria-label={`${label} ${formatPower(total, unit)} ${unit}: AC loads ${formatPower(loads, unit)} ${unit}, battery charging ${formatPower(charging, unit)} ${unit}, DC loads and losses ${formatPower(other, unit)} ${unit}`}
-      >
-        {loadsShare != null && (
-          <span
-            className="seg-loads"
-            style={{ width: `${loadsShare}%` }}
-            title={`To AC loads: ${formatPower(loads, unit)} ${unit}`}
-          />
-        )}
-        {chargingShare != null && (
-          <span
-            className="seg-charging"
-            style={{ width: `${chargingShare}%` }}
-            title={`To battery charging: ${formatPower(charging, unit)} ${unit}`}
-          />
-        )}
-        <span
-          className="seg-dc"
-          style={{ flexGrow: 1 }}
-          title={`DC loads + losses: ${formatPower(other, unit)} ${unit}`}
-        />
+      <div className="generator-stats system-use-stats">
+        {outputs.map(({ key, label, tileLabel, value, color }) => (
+          <div className="gen-stat" key={key}>
+            <span><i className={`split-swatch ${color.replace("seg-", "split-")}`} />{tileLabel ?? label}</span>
+            <strong>{value != null && value < 0 ? "−" : ""}{formatPower(value, unit)} <small>{unit}</small></strong>
+          </div>
+        ))}
       </div>
-      <div className="split-labels" aria-hidden="true">
-        {loadsShare != null && <span style={{ width: `${loadsShare}%` }}>{roundedLoads}%</span>}
-        {chargingShare != null && <span style={{ width: `${chargingShare}%` }}>{roundedCharging}%</span>}
-        <span style={{ flexGrow: 1 }}>{Math.max(0, 100 - roundedLoads - roundedCharging)}%</span>
+      <div className="split-bar" role="img" aria-label={`Positive power-use readings: AC loads ${rounded[0]}%, DC (GX) ${rounded[1]}%, battery charging ${rounded[2]}%`}>
+        {outputs.map(({ key, color }, index) => (
+          <span key={key} className={color} style={{ width: `${shares[index]}%` }} />
+        ))}
       </div>
-    </>
+      <div className="system-use-legend">
+        {outputs.map(({ key, label }, index) => <span key={key}>{label} {rounded[index]}%</span>)}
+      </div>
+      <p className="gen-supply">Percentages compare positive reported readings, not a measured split of each source. DC (GX) is a calculated indication and can be negative; negative values stay visible above but have no positive bar share.</p>
+    </section>
   );
 }
 
 function GeneratorPanel({ metrics: m, activeRun }) {
-  if (m.ac_in_source !== "generator" || m.ac_in_power == null) return null;
+  const unit = usePowerUnit();
+  const feeding = m.ac_in_source === "generator" && m.ac_in_power != null && m.ac_in_connected !== false;
+  const running = Boolean(activeRun) || [1, 2, 3].includes(m.generator_state) || (m.generator_power ?? 0) > 20;
+  if (!running && !feeding) return null;
   return (
     <section className="panel generator-panel">
       <div className="panel-heading">
         <div>
           <span className="eyebrow">GENSET RUNNING</span>
           <h2>Generator input.</h2>
-          {(m.ac_in_voltage != null || m.ac_in_frequency != null) && (
+          {feeding && (m.ac_in_voltage != null || m.ac_in_frequency != null) && (
             <span className="gen-supply">
               {number(m.ac_in_voltage)} V · {number(m.ac_in_frequency)} Hz
             </span>
           )}
         </div>
-        <span className="status-pill is-live">
+        <span className={`status-pill ${feeding ? "is-live" : "is-warning"}`}>
           <span className="pulse-dot" />
-          {activeRun ? `Running since ${clock(activeRun.started_at)}` : "Feeding the inverter"}
+          {feeding ? "Feeding the inverter" : "Running · no accepted AC input"}
         </span>
       </div>
-      <InputSplit label="Generator input" totalLabel="Total in" total={m.ac_in_power} metrics={m} />
+      <div className="generator-stats">
+        <div className="gen-stat total"><span>Accepted input</span><strong>{formatPower(feeding ? m.ac_in_power : null, unit)} <small>{unit}</small></strong></div>
+        <div className="gen-stat"><span>Voltage seen</span><strong>{number(m.ac_in_voltage)} <small>V</small></strong></div>
+        <div className="gen-stat"><span>Frequency seen</span><strong>{number(m.ac_in_frequency)} <small>Hz</small></strong></div>
+        <div className="gen-stat"><span>This run</span><strong>{formatDuration(activeRun?.duration_seconds) ?? "—"}</strong></div>
+      </div>
+      {!feeding && <p className="gen-supply" role="status">GX reports generator runtime, but the MultiPlus is not accepting its AC input. The dashboard cannot restore that connection.</p>}
     </section>
   );
 }
 
 function SolarPanel({ metrics: m }) {
+  const unit = usePowerUnit();
   // Same visibility rule as the sun/moon icon: hidden while idle or dark.
   if (m.solar_power == null || m.solar_power <= 0) return null;
   return (
@@ -531,7 +506,12 @@ function SolarPanel({ metrics: m }) {
           Harvesting sunshine
         </span>
       </div>
-      <InputSplit label="Solar harvest" totalLabel="Total harvest" total={m.solar_power} metrics={m} />
+      <div className="generator-stats">
+        <div className="gen-stat total"><span>Total harvest</span><strong>{formatPower(m.solar_power, unit)} <small>{unit}</small></strong></div>
+        <div className="gen-stat"><span>PV voltage</span><strong>{number(m.pv_voltage)} <small>V</small></strong></div>
+        <div className="gen-stat"><span>PV current</span><strong>{number(m.pv_current)} <small>A</small></strong></div>
+        <div className="gen-stat"><span>Harvest today</span><strong>{number(m.solar_yield_today, 2)} <small>kWh</small></strong></div>
+      </div>
     </section>
   );
 }
@@ -882,10 +862,12 @@ export default function Dashboard({ demo, historyOnly = false }) {
             />
             <MetricCard
               icon="grid"
-              title={m.ac_in_source === "generator" ? "AC input" : "Grid exchange"}
-              value={m.grid_power}
+              title={m.ac_in_configured_source === "generator" || m.ac_in_source === "generator" ? "AC input" : "Grid exchange"}
+              value={m.ac_in_configured_source === "generator" || m.ac_in_source === "generator" ? m.ac_in_power : m.grid_power}
               detail={
-                m.ac_in_source === "generator"
+                m.ac_in_connected === false && m.ac_in_configured_source === "generator"
+                  ? "Generator AC input disconnected"
+                  : m.ac_in_source === "generator"
                   ? "Fed by the generator"
                   : m.grid_power == null
                     ? "Awaiting grid readings"
@@ -897,7 +879,9 @@ export default function Dashboard({ demo, historyOnly = false }) {
               }
               tone="grid-card"
               trend={
-                m.ac_in_frequency > 0
+                m.ac_in_connected === false
+                  ? "DISCONNECTED"
+                  : m.ac_in_frequency > 0
                   ? `${number(m.ac_in_frequency)} Hz ${m.ac_in_source === "generator" ? "AC IN" : "GRID"}`
                   : m.ac_in_source === "generator"
                     ? "AC IN"
@@ -910,8 +894,11 @@ export default function Dashboard({ demo, historyOnly = false }) {
               value={generatorFeed(m)}
               detail={(() => {
                 const runs = data?.generator_runs;
-                if (runs?.active_run)
-                  return `Running · since ${clock(runs.active_run.started_at)}`;
+                if (runs?.active_run) {
+                  if (m.ac_in_connected === false) return "Running · AC input disconnected";
+                  if (generatorFeed(m) == null) return "Running · no accepted input power";
+                  return `Feeding inverter · since ${clock(runs.active_run.started_at)}`;
+                }
                 if (m.ac_in_source === "generator") return "Feeding the inverter";
                 const last = runSummary(runs?.recent?.[0]);
                 if (last) return `Last run ${last}`;
@@ -932,8 +919,9 @@ export default function Dashboard({ demo, historyOnly = false }) {
           </div>
           <SolarPanel metrics={m} />
           <GeneratorPanel metrics={m} activeRun={data?.generator_runs?.active_run} />
+          <SystemUsePanel metrics={m} />
           <div className="energy-grid">
-            <Flow metrics={m} live={live} />
+            <Flow metrics={m} live={live} activeRun={data?.generator_runs?.active_run} />
             <Battery metrics={m} />
           </div>
         </>
