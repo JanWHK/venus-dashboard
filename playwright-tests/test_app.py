@@ -1,6 +1,7 @@
 """Helio browser regression tests. Default tests use only the explicit demo."""
 import os
 import re
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from playwright.sync_api import Page, expect
@@ -126,6 +127,38 @@ def test_report_run_log_fits_phone_width(page: Page):
     assert table.locator("td[data-label='Peak output']").first.evaluate(
         "element => element.getBoundingClientRect().right <= element.closest('.report-table-scroll').getBoundingClientRect().right"
     )
+
+
+@pytest.mark.parametrize("width", [320, 1440])
+def test_night_fuel_planner_live_only_and_phone_width(page: Page, width):
+    now = datetime.now(timezone.utc)
+    def row(hours_ago, soc, power=0):
+        return {"recorded_at": (now - timedelta(hours=hours_ago)).isoformat(),
+                "battery_soc": soc, "generator_power": power,
+                "ac_in_power": power, "solar_power": 0}
+    rows = [row(5, 20, 3200), row(4.5, 25, 3200), row(4, 30, 3200),
+            row(2, 44), row(1.5, 39), row(1, 34), row(.5, 29), row(0, 24)]
+    page.route("**/api/auth/me", lambda route: route.fulfill(json={"username": "tester", "role": "viewer"}))
+    page.route("**/api/alerts", lambda route: route.fulfill(json={
+        "soc": 24, "active": [], "recent": [],
+        "channels": {"telegram": True, "email": True}}))
+    page.route("**/api/live", lambda route: route.fulfill(json={
+        "status": "live", "metrics": {"battery_soc": 24}, "generator_runs": {"recent": []},
+        "history": [], "alarms": [], "device_count": 0, "topic_count": 0}))
+    page.route("**/api/readings?*", lambda route: route.fulfill(json=rows))
+    page.route("**/api/reports/generator", lambda route: route.fulfill(json={
+        "fuel_calibration": {"liters_per_kwh": 11 / 17.1056}}))
+    page.set_viewport_size({"width": width, "height": 900})
+    page.goto(BASE)
+    planner = page.get_by_role("region", name="Night fuel planner")
+    target = page.evaluate("() => { const d = new Date(Date.now() + 10 * 3600000); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }")
+    page.get_by_label("Target time").fill(target)
+    expect(planner).to_contain_text("Generator time")
+    expect(planner).to_contain_text("Enter tank fuel")
+    page.get_by_label("Usable fuel already in tank").fill("2")
+    expect(planner).to_contain_text("Petrol to add")
+    assert "Enter tank fuel" not in planner.inner_text()
+    assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
 
 
 @pytest.mark.parametrize("width", [320, 390, 768, 1440])
