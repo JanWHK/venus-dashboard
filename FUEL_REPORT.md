@@ -24,12 +24,24 @@ the month of its local start time; a run crossing midnight or a month boundary
 is not split. Selected date ranges can therefore show partial months. Runs with
 no power telemetry count as runs but have no estimated liters or cost.
 
-For each month, `estimated liters = metered kWh × 0.643064`. Fuel price is an
-editable `N$/liter` input on the report. `estimated cost = estimated liters ×
-entered price`. Price is stored only in that browser's local storage, not in the
-database or report API. Changing price recalculates all displayed months at the
-new price; it does not retain historical pump prices, receipts, taxes, or other
-operating costs. Leave price blank to show liters without cost.
+For each month, `estimated liters = metered kWh × 0.643064`. Fuel prices are
+stored in `generator_fuel_prices` as `N$/liter` with an effective timestamp.
+The owner enters a local effective date in Reports; the browser sends midnight
+with its timezone offset and the server stores the corresponding UTC instant.
+The owner may save a new price, correct the amount at the same effective date,
+or remove an erroneous entry. Viewers may read the history and costs but not
+change it. The authenticated `PUT`/`DELETE /api/reports/fuel-prices` endpoints
+require owner role and the request verification header.
+
+Each metered run uses the latest price effective **at its start**. All energy
+from a run crossing a price change retains its start price. The API returns
+`fuel_prices` plus monthly `estimated_liters`, `estimated_cost`, `priced_runs`,
+and `missing_price_runs`. Cost is unknown (`null`) for a month unless **every**
+metered run in that month has a historical price; the UI shows missing coverage,
+not a falsely complete total. Backdating or correcting a price recalculates
+historical estimates. The old browser-only price key is not migrated because it
+has no known effective date. These are estimated fuel costs, not receipts,
+taxes, or actual expenditure. Price history changes never alter generator runs.
 
 Test with `PYTHONPATH=backend python -m pytest backend/tests/test_reports.py -q`,
 the disposable PostgreSQL integration suite in `ALERTS.md`, the frontend

@@ -87,15 +87,9 @@ def test_reports_tabs_ranges_and_split_labels(page: Page):
     finance = page.locator(".finance-panel")
     expect(finance).to_contain_text("0.6431")
     expect(finance).to_contain_text("11 L measured across 3 runs")
-    price = page.get_by_label("Fuel price")
-    price.fill("10")
-    expect(finance).to_contain_text("N$ 761.46")
-    price.fill("20")
-    expect(finance).to_contain_text("N$ 1,522.93")
-    assert page.evaluate("localStorage.getItem('helio-generator-fuel-price')") == "20"
-    price.fill("")
-    expect(finance.get_by_text("Enter fuel price above")).to_be_visible()
-    assert page.evaluate("localStorage.getItem('helio-generator-fuel-price')") is None
+    expect(finance).to_contain_text("11 metered runs lack a historical price")
+    expect(finance).to_contain_text("Demo data has no saved prices")
+    expect(finance.get_by_label("Fuel price")).to_have_count(0)
     expect(page.locator(".split-bar .seg-charging")).to_be_visible()
     labels = page.locator(".split-labels span").all_inner_texts()
     assert sum(int(re.sub(r"\D", "", label) or 0) for label in labels) == 100

@@ -6,13 +6,15 @@ windows so the split reflects only what the genset fed; solar and
 consumption integrate over the whole range.
 """
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from statistics import median
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from auth import require_user
-from database import EnergySample, GeneratorRun, SessionLocal
+from auth import require_admin, require_csrf_header, require_user
+from database import EnergySample, FuelPrice, GeneratorRun, SessionLocal
 
 router = APIRouter(prefix="/api/reports", dependencies=[Depends(require_user)])
 
@@ -210,6 +212,73 @@ def runs_monthly(runs, tz_offset_minutes, range_start, range_end):
             for month, bucket in sorted(buckets.items())]
 
 
+def monthly_fuel_costs(monthly, runs, prices, tz_offset_minutes, range_start, range_end):
+    """Price each metered run at the rate effective when that run began."""
+    by_month = {row["month"]: {**row, "estimated_liters": None,
+                               "estimated_cost": None, "priced_runs": 0,
+                               "missing_price_runs": 0} for row in monthly}
+    totals = {month: 0.0 for month in by_month}
+    offset = timedelta(minutes=tz_offset_minutes)
+    ordered_prices = sorted(prices, key=lambda row: row.effective_at)
+    for run in runs:
+        if not range_start <= run.started_at <= range_end or run.energy_kwh is None:
+            continue
+        month = (run.started_at + offset).strftime("%Y-%m")
+        bucket = by_month[month]
+        price = next((row for row in reversed(ordered_prices)
+                      if row.effective_at <= run.started_at), None)
+        if price is None:
+            bucket["missing_price_runs"] += 1
+        else:
+            bucket["priced_runs"] += 1
+            totals[month] += run.energy_kwh * FUEL_LITERS_PER_KWH * float(price.price_per_liter)
+    for month, bucket in by_month.items():
+        if bucket["metered_runs"]:
+            bucket["estimated_liters"] = round(bucket["energy_kwh"] * FUEL_LITERS_PER_KWH, 4)
+            if not bucket["missing_price_runs"]:
+                bucket["estimated_cost"] = round(totals[month], 2)
+    return [by_month[row["month"]] for row in monthly]
+
+
+class FuelPriceInput(BaseModel):
+    effective_at: datetime
+    price_per_liter: Decimal = Field(gt=0, le=1000, max_digits=6, decimal_places=2)
+
+
+def fuel_price_payload(row):
+    return {"effective_at": row.effective_at.isoformat(),
+            "price_per_liter": float(row.price_per_liter)}
+
+
+@router.put("/fuel-prices", dependencies=[Depends(require_admin), Depends(require_csrf_header)])
+async def save_fuel_price(body: FuelPriceInput):
+    if body.effective_at.tzinfo is None:
+        raise HTTPException(422, "Effective time must include a timezone offset")
+    effective_at = body.effective_at.astimezone(timezone.utc)
+    async with SessionLocal() as session:
+        row = await session.get(FuelPrice, effective_at)
+        if row is None:
+            row = FuelPrice(effective_at=effective_at, price_per_liter=body.price_per_liter)
+            session.add(row)
+        else:
+            row.price_per_liter = body.price_per_liter
+        await session.commit()
+        return fuel_price_payload(row)
+
+
+@router.delete("/fuel-prices", dependencies=[Depends(require_admin), Depends(require_csrf_header)])
+async def delete_fuel_price(effective_at: datetime):
+    if effective_at.tzinfo is None:
+        raise HTTPException(422, "Effective time must include a timezone offset")
+    async with SessionLocal() as session:
+        row = await session.get(FuelPrice, effective_at.astimezone(timezone.utc))
+        if row is None:
+            raise HTTPException(404, "Fuel price not found")
+        await session.delete(row)
+        await session.commit()
+    return {"deleted": True}
+
+
 @router.get("/{kind}")
 async def report(kind: str,
                  from_time: datetime | None = Query(None, alias="from"),
@@ -240,6 +309,9 @@ async def report(kind: str,
                    func.coalesce(GeneratorRun.ended_at, GeneratorRun.updated_at) >= from_time)
             .order_by(GeneratorRun.started_at.desc())
         )).scalars().all()
+        prices = (await session.execute(
+            select(FuelPrice).order_by(FuelPrice.effective_at.asc())
+        )).scalars().all() if kind == "generator" else []
 
     runs = unique_runs(runs)
     complete = len(samples) > SAMPLE_CAP
@@ -283,7 +355,10 @@ async def report(kind: str,
                 "run_list": [run_payload(row) for row in runs[:RUN_LIST_CAP]],
                 "energy": energy,
                 "daily": runs_daily(runs, tz_offset_minutes, from_time, to_time),
-                "monthly": runs_monthly(runs, tz_offset_minutes, from_time, to_time),
+                "monthly": monthly_fuel_costs(
+                    runs_monthly(runs, tz_offset_minutes, from_time, to_time),
+                    runs, prices, tz_offset_minutes, from_time, to_time),
+                "fuel_prices": [fuel_price_payload(row) for row in prices],
                 "fuel_calibration": {
                     "measured_liters": FUEL_CALIBRATION_LITERS,
                     "metered_kwh": FUEL_CALIBRATION_KWH,
