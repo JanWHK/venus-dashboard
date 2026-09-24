@@ -2424,6 +2424,35 @@ input {
   color: var(--text-soft);
   font-size: 13px;
 }
+.finance-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 4px 0 20px;
+}
+.finance-controls label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.finance-controls label span,
+.finance-controls > span {
+  color: var(--text-soft);
+  font-weight: 400;
+  font-size: 12px;
+}
+.finance-controls input {
+  width: 150px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+.finance-panel .report-table-scroll {
+  margin-top: 20px;
+}
 .gen-stat-detail {
   display: block;
   margin-top: 3px;

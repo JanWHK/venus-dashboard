@@ -198,6 +198,19 @@ export function demoReport(kind) {
         ac_loads_samples: 210,
         dc_loads_samples: 96,
       },
+      monthly: [{
+        month: now.toLocaleDateString("en-CA").slice(0, 7),
+        runs: 14,
+        metered_runs: 11,
+        duration_seconds: 51234,
+        energy_kwh: 118.412,
+      }],
+      fuel_calibration: {
+        measured_liters: 11,
+        metered_kwh: 17.1056,
+        liters_per_kwh: 0.643064,
+        run_starts: [],
+      },
       daily,
     };
   }
