@@ -24,7 +24,10 @@ const PRESETS = [
   ["7d", "7 days", 7],
   ["30d", "30 days", 30],
   ["90d", "90 days", 90],
+  ["month", "This month", 0],
+  ["year", "365 days", 365],
 ];
+const FUEL_PRICE_KEY = "helio-generator-fuel-price";
 
 const startOfDay = (date) => {
   const d = new Date(date);
@@ -257,6 +260,7 @@ function GeneratorReport({ data, unit }) {
           />
         </Tiles>
       </section>
+      <GeneratorFinance data={data} />
       {energy ? (
         <section className="panel">
           <div className="panel-heading">
@@ -361,6 +365,72 @@ function GeneratorReport({ data, unit }) {
         <RunsTable runs={data.run_list} />
       </section>
     </>
+  );
+}
+
+function GeneratorFinance({ data }) {
+  const [priceInput, setPriceInput] = useState(() => localStorage.getItem(FUEL_PRICE_KEY) ?? "");
+  const factor = data.fuel_calibration?.liters_per_kwh;
+  const price = priceInput.trim() === "" ? null : Number(priceInput);
+  const validPrice = price != null && Number.isFinite(price) && price >= 0;
+  const monthly = data.monthly ?? [];
+  const meteredKwh = monthly.reduce((sum, row) => sum + (row.energy_kwh ?? 0), 0);
+  const meteredRuns = monthly.reduce((sum, row) => sum + row.metered_runs, 0);
+  const totalRuns = monthly.reduce((sum, row) => sum + row.runs, 0);
+  const estimatedLiters = factor != null && meteredRuns ? meteredKwh * factor : null;
+  const changePrice = (event) => {
+    const value = event.target.value;
+    setPriceInput(value);
+    if (value === "") localStorage.removeItem(FUEL_PRICE_KEY);
+    else localStorage.setItem(FUEL_PRICE_KEY, value);
+  };
+  return (
+    <section className="panel finance-panel">
+      <div className="panel-heading">
+        <div>
+          <span className="eyebrow">MONTHLY FINANCIAL REPORT</span>
+          <h2>What generator fuel may cost.</h2>
+          <span className="gen-supply">Estimated from metered output, not a fuel sensor.</span>
+        </div>
+      </div>
+      <div className="finance-controls">
+        <label htmlFor="generator-fuel-price">Fuel price <span>N$/liter</span></label>
+        <input id="generator-fuel-price" type="number" inputMode="decimal" min="0" step="0.01"
+          value={priceInput} onChange={changePrice} placeholder="Enter price" />
+        <span>Saved in this browser only; change price to recalculate all displayed months.</span>
+      </div>
+      <Tiles>
+        <Tile label="Estimated fuel" value={estimatedLiters == null ? "—" : number(estimatedLiters, 2)}
+          unit={estimatedLiters == null ? undefined : "L"} detail={`${meteredRuns} of ${totalRuns} runs metered`} />
+        <Tile label="Estimated fuel cost" value={estimatedLiters == null || !validPrice ? "—" : `N$ ${number(estimatedLiters * price, 2)}`}
+          detail={validPrice && factor != null ? `N$ ${number(factor * price, 2)} per kWh` : "Enter fuel price above"} />
+        <Tile label="Fuel factor" value={factor == null ? "—" : number(factor, 4)}
+          unit={factor == null ? undefined : "L/kWh"}
+          detail={`${number(data.fuel_calibration?.measured_liters, 0)} L measured across 3 runs · ${number(data.fuel_calibration?.metered_kwh, 4)} kWh`} />
+      </Tiles>
+      {monthly.length ? (
+        <div className="report-table-scroll">
+          <table className="report-table">
+            <thead><tr><th scope="col">Month</th><th scope="col">Runs</th><th scope="col">Output</th><th scope="col">Estimated fuel</th><th scope="col">Estimated cost</th></tr></thead>
+            <tbody>
+              {[...monthly].reverse().map((row) => {
+                const liters = row.energy_kwh != null && factor != null ? row.energy_kwh * factor : null;
+                return (
+                  <tr key={row.month}>
+                    <td data-label="Month">{new Date(`${row.month}-01T12:00:00`).toLocaleDateString(undefined, { month: "long", year: "numeric" })}</td>
+                    <td data-label="Runs">{row.metered_runs} / {row.runs} metered</td>
+                    <td data-label="Output">{row.energy_kwh == null ? "—" : `${number(row.energy_kwh, 2)} kWh`}</td>
+                    <td data-label="Estimated fuel">{liters == null ? "—" : `${number(liters, 2)} L`}</td>
+                    <td data-label="Estimated cost">{liters == null || !validPrice ? "—" : `N$ ${number(liters * price, 2)}`}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : <p className="report-note">No generator runs started in this period.</p>}
+      <p className="report-note">Runs count in their local start month. Date filters may show partial months. Runs without power data have no fuel estimate. Actual fuel use changes with load and idle time.</p>
+    </section>
   );
 }
 
@@ -571,7 +641,8 @@ export default function Reports({ demo }) {
 
   const invalidRange = range.from > range.to;
   const pickPreset = ([key, , days]) =>
-    setRange({ key, from: dayBack(days), to: endOfDay(Date.now()) });
+    setRange({ key, from: key === "month" ? startOfDay(new Date(new Date().getFullYear(), new Date().getMonth(), 1)) : dayBack(days),
+      to: endOfDay(Date.now()) });
   const pickCustomDate = (edge) => (event) => {
     const next = { ...custom, [edge]: event.target.value };
     setCustom(next);

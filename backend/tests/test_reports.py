@@ -6,11 +6,14 @@ from types import SimpleNamespace
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://x:x@localhost:5432/x")
 
 from reports import (  # noqa: E402
+    FUEL_CALIBRATION_KWH,
+    FUEL_LITERS_PER_KWH,
     integrate_daily,
     integrate_series,
     run_stats,
     run_windows,
     runs_daily,
+    runs_monthly,
 )
 
 START = datetime(2026, 9, 20, 12, 0, tzinfo=timezone.utc)
@@ -108,3 +111,25 @@ def test_runs_daily_bucket_on_local_start_day():
     assert daily[1]["runs"] == 2
     assert daily[1]["duration_seconds"] == 2100.0
     assert daily[1]["energy_kwh"] == 1.3  # the NULL-energy run adds nothing
+
+
+def test_fuel_calibration_uses_three_completed_distinct_runs():
+    assert FUEL_CALIBRATION_KWH == 17.1056
+    assert round(FUEL_LITERS_PER_KWH, 6) == 0.643064
+
+
+def test_runs_monthly_uses_local_start_month_and_marks_missing_energy():
+    runs = [
+        SimpleNamespace(started_at=datetime(2026, 8, 31, 22, 30, tzinfo=timezone.utc),
+                        duration_seconds=3600.0, energy_kwh=2.0),
+        SimpleNamespace(started_at=datetime(2026, 9, 3, 10, tzinfo=timezone.utc),
+                        duration_seconds=900.0, energy_kwh=None),
+        SimpleNamespace(started_at=datetime(2026, 9, 4, 10, tzinfo=timezone.utc),
+                        duration_seconds=1800.0, energy_kwh=1.5),
+    ]
+    monthly = runs_monthly(runs, 120, datetime(2026, 8, 1, tzinfo=timezone.utc),
+                           datetime(2026, 9, 30, tzinfo=timezone.utc))
+    assert monthly == [{"month": "2026-09", "runs": 3, "metered_runs": 2,
+                        "duration_seconds": 6300.0, "energy_kwh": 3.5}]
+    unmetered = runs_monthly(runs[1:2], 0, runs[1].started_at, runs[1].started_at)
+    assert unmetered[0]["energy_kwh"] is None

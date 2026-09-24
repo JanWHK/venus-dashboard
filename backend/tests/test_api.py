@@ -288,6 +288,12 @@ def test_generator_report_totals(client):
     assert day["runs"] == 2
     assert day["duration_seconds"] == 1800.0
     assert day["energy_kwh"] == 1.3
+    month = data["monthly"][0]
+    assert month["runs"] == 2
+    assert month["metered_runs"] == 1
+    assert month["energy_kwh"] == 1.3
+    assert data["fuel_calibration"]["measured_liters"] == 11
+    assert data["fuel_calibration"]["liters_per_kwh"] == 0.643064
     # The two new summary fields ride along with /api/readings.
     row = client.get("/api/readings").json()[-1]
     assert row["ac_in_power"] == 3000.0
@@ -346,6 +352,8 @@ def test_generator_report_collapses_existing_duplicate_runs(client):
     assert len(data["run_list"]) == 1
     assert data["daily"][0]["runs"] == 1
     assert data["daily"][0]["energy_kwh"] == 8.04
+    assert data["monthly"][0]["energy_kwh"] == 8.04
+    assert data["monthly"][0]["runs"] == 1
     assert len(client.get("/api/live").json()["generator_runs"]["recent"]) == 1
 
 

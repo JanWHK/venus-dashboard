@@ -83,6 +83,18 @@ def test_reports_tabs_ranges_and_split_labels(page: Page):
     page.get_by_role("navigation", name="Main navigation").get_by_role("link", name="Reports", exact=True).click()
     expect(page.get_by_role("heading", name="Reports.")).to_be_visible()
     expect(page.locator(".gen-stat.total").first).to_contain_text("Total output")
+    finance = page.locator(".finance-panel")
+    expect(finance).to_contain_text("0.6431")
+    expect(finance).to_contain_text("11 L measured across 3 runs")
+    price = page.get_by_label("Fuel price")
+    price.fill("10")
+    expect(finance).to_contain_text("N$ 761.46")
+    price.fill("20")
+    expect(finance).to_contain_text("N$ 1,522.93")
+    assert page.evaluate("localStorage.getItem('helio-generator-fuel-price')") == "20"
+    price.fill("")
+    expect(finance.get_by_text("Enter fuel price above")).to_be_visible()
+    assert page.evaluate("localStorage.getItem('helio-generator-fuel-price')") is None
     expect(page.locator(".split-bar .seg-charging")).to_be_visible()
     labels = page.locator(".split-labels span").all_inner_texts()
     assert sum(int(re.sub(r"\D", "", label) or 0) for label in labels) == 100
@@ -94,8 +106,8 @@ def test_reports_tabs_ranges_and_split_labels(page: Page):
     page.get_by_role("button", name="Generator", exact=True).click()
     expect(page.locator(".gen-stat.total").first).to_contain_text("Total output")
     # Demo DC coverage is partial, so the coverage note shows.
-    expect(page.locator(".report-note").first).to_contain_text("DC loads (GX)")
-    for label in ["7 days", "30 days", "90 days"]:
+    expect(page.locator(".report-note").filter(has_text="DC loads (GX)")).to_be_visible()
+    for label in ["7 days", "30 days", "90 days", "This month", "365 days"]:
         page.get_by_role("button", name=label, exact=True).click()
         expect(page.get_by_role("button", name=label, exact=True)).to_have_attribute("aria-pressed", "true")
     page.get_by_label("Start date").fill("2026-08-01")
@@ -106,7 +118,9 @@ def test_report_run_log_fits_phone_width(page: Page):
     page.set_viewport_size({"width": 320, "height": 900})
     open_demo(page)
     page.get_by_role("navigation", name="Main navigation").get_by_role("link", name="Reports", exact=True).click()
-    table = page.locator(".report-table-scroll")
+    table = page.locator(".report-table-scroll").last
+    for report_table in page.locator(".report-table-scroll").all():
+        assert report_table.evaluate("element => element.scrollWidth <= element.clientWidth")
     expect(table.locator("td[data-label='Peak output']").first).to_be_visible()
     assert table.evaluate("element => element.scrollWidth <= element.clientWidth")
     assert table.locator("td[data-label='Peak output']").first.evaluate(
