@@ -24,6 +24,14 @@ def test_demo_has_explicit_sample_label_and_energy_flow(page: Page):
     open_demo(page)
     expect(page.locator(".demo-banner")).to_contain_text("Illustrative data")
     expect(page.get_by_role("heading", name="Your energy, in motion.")).to_be_visible()
+    expect(page.get_by_role("heading", name="Solar input.")).to_be_visible()
+    expect(page.get_by_role("heading", name="Generator input.")).to_be_visible()
+    expect(page.locator(".grid-card")).to_contain_text("AC input")
+    expect(page.locator(".grid-card .metric-value")).to_contain_text("2.56")
+    mix = page.locator(".system-use-panel")
+    expect(mix).to_contain_text("DC (GX)")
+    assert mix.locator(".seg-dc").evaluate("element => element.getBoundingClientRect().width > 0")
+    assert sum(int(value) for value in re.findall(r"(\d+)%", mix.locator(".system-use-legend").inner_text())) == 100
     expect(page.locator(".gauge-number")).to_contain_text("81")
 
 

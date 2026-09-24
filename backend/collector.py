@@ -227,17 +227,22 @@ class LiveCollector:
         current = fallback(get("system", "Dc/Battery/Current"), get("battery", "Dc/0/Current"))
         solar_parts = [v for v in (fallback(get("system", "Dc/Pv/Power"), solar_sum("Yield/Power")),
                                   phases("Ac/PvOnOutput"), phases("Ac/PvOnGrid"), phases("Ac/PvOnGenset")) if v is not None]
-        # No grid service reports here; grid is seen through the MultiPlus AC
-        # input. ActiveInput 240 means no input is connected — never treat
-        # its idle 0 V readings as grid.
+        # ActiveInput 240 means no input is accepted. The configured input
+        # source is independent of the input slot: this installation has its
+        # generator on slot 0.
         active_input = get("vebus", "Ac/ActiveIn/ActiveInput")
-        vebus_ac_in_power = get("vebus", "Ac/ActiveIn/L1/P") if active_input in (0, 1) else None
+        connected_value = get("vebus", "Ac/ActiveIn/Connected")
+        ac_in_connected = (False if active_input == 240 or connected_value == 0 else
+                           True if connected_value == 1 else None)
+        vebus_ac_in_power = (get("vebus", "Ac/ActiveIn/L1/P")
+                             if active_input in (0, 1) and ac_in_connected is not False else None)
         genset_power = phases("Ac/Genset")
-        # The genset can be wired to either MultiPlus AC input, so the input
-        # slot alone doesn't identify the source. Live genset power wins;
-        # otherwise fall back to the input's configured role (0 = grid, 1 = generator).
-        ac_in_source = ("generator" if genset_power is not None and genset_power > GENSET_MIN_WATTS
-                        else {0: "grid", 1: "generator"}.get(active_input))
+        configured_code = get("system", f"Ac/In/{active_input if active_input in (0, 1) else 0}/Source")
+        configured_source = {1: "grid", 2: "generator", 3: "shore"}.get(configured_code)
+        ac_in_source = None
+        if active_input in (0, 1) and ac_in_connected is not False:
+            ac_in_source = ("generator" if genset_power is not None and genset_power > GENSET_MIN_WATTS
+                            else configured_source or {0: "grid", 1: "generator"}[active_input])
         metrics = {
             "solar_power": sum(solar_parts) if solar_parts else None,
             "battery_soc": fallback(get("system", "Dc/Battery/Soc"), get("battery", "Soc")),
@@ -250,6 +255,8 @@ class LiveCollector:
             "load_power": phases("Ac/Consumption"),
             "ac_in_power": vebus_ac_in_power,
             "ac_in_source": ac_in_source,
+            "ac_in_connected": ac_in_connected,
+            "ac_in_configured_source": configured_source,
             "solar_yield_today": solar_sum("History/Daily/0/Yield"),
             "grid_voltage": get("grid", "Ac/L1/Voltage"),
             "ac_out_voltage": get("vebus", "Ac/Out/L1/V"),
