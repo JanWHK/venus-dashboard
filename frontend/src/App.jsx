@@ -184,7 +184,7 @@ function Workspace() {
                 path="/settings"
                 element={<Settings demo={demo} user={user} />}
               />
-              <Route path="/reports" element={<Reports demo={demo} />} />
+              <Route path="/reports" element={<Reports demo={demo} user={user} />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>

@@ -1,6 +1,7 @@
 """Pure unit tests for the report integrator — no database needed."""
 import os
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://x:x@localhost:5432/x")
@@ -10,6 +11,7 @@ from reports import (  # noqa: E402
     FUEL_LITERS_PER_KWH,
     integrate_daily,
     integrate_series,
+    monthly_fuel_costs,
     run_stats,
     run_windows,
     runs_daily,
@@ -116,6 +118,25 @@ def test_runs_daily_bucket_on_local_start_day():
 def test_fuel_calibration_uses_three_completed_distinct_runs():
     assert FUEL_CALIBRATION_KWH == 17.1056
     assert round(FUEL_LITERS_PER_KWH, 6) == 0.643064
+
+
+def test_monthly_fuel_cost_uses_each_runs_historical_price_and_marks_gaps():
+    at = lambda day: datetime(2026, 9, day, 10, tzinfo=timezone.utc)
+    runs = [SimpleNamespace(started_at=at(day), duration_seconds=3600, energy_kwh=2.0)
+            for day in (1, 10, 20)]
+    prices = [SimpleNamespace(effective_at=at(5), price_per_liter=Decimal("20.00")),
+              SimpleNamespace(effective_at=at(15), price_per_liter=Decimal("25.00"))]
+    monthly = runs_monthly(runs, 0, at(1), at(20))
+    row = monthly_fuel_costs(monthly, runs, prices, 0, at(1), at(20))[0]
+    assert row["priced_runs"] == 2
+    assert row["missing_price_runs"] == 1
+    assert row["estimated_cost"] is None
+    assert row["estimated_liters"] == round(6 * FUEL_LITERS_PER_KWH, 4)
+    prices.insert(0, SimpleNamespace(effective_at=at(1), price_per_liter=Decimal("10.00")))
+    row = monthly_fuel_costs(monthly, runs, prices, 0, at(1), at(20))[0]
+    assert row["priced_runs"] == 3
+    assert row["missing_price_runs"] == 0
+    assert row["estimated_cost"] == round(2 * FUEL_LITERS_PER_KWH * 55, 2)
 
 
 def test_runs_monthly_uses_local_start_month_and_marks_missing_energy():

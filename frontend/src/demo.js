@@ -204,7 +204,12 @@ export function demoReport(kind) {
         metered_runs: 11,
         duration_seconds: 51234,
         energy_kwh: 118.412,
+        estimated_liters: 76.1465,
+        estimated_cost: null,
+        priced_runs: 0,
+        missing_price_runs: 11,
       }],
+      fuel_prices: [],
       fuel_calibration: {
         measured_liters: 11,
         metered_kwh: 17.1056,

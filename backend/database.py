@@ -3,7 +3,7 @@ import datetime
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
-from sqlalchemy import Column, BigInteger, Integer, Float, DateTime, String, Boolean, text
+from sqlalchemy import Column, BigInteger, Integer, Float, DateTime, String, Boolean, Numeric, text
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 SYNC_DATABASE_URL = os.environ.get(
@@ -90,6 +90,13 @@ class GeneratorRun(Base):
     peak_power_w = Column(Float)
     updated_at = Column(DateTime(timezone=True), nullable=False,
                         server_default=text("NOW()"))
+
+
+class FuelPrice(Base):
+    __tablename__ = "generator_fuel_prices"
+    effective_at = Column(DateTime(timezone=True), primary_key=True)
+    price_per_liter = Column(Numeric(10, 2), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
 
 class Setting(Base):

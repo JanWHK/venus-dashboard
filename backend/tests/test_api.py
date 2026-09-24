@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 import auth
 import main
-from database import Account, DashboardSetting, EnergySample, GeneratorRun, LoginSession, BatteryAlert, BatteryAlertRule, sync_engine
+from database import Account, DashboardSetting, EnergySample, GeneratorRun, FuelPrice, LoginSession, BatteryAlert, BatteryAlertRule, sync_engine
 
 HEADERS = {"X-Helio-Request": "1"}
 CREDENTIALS = {"username": "owner", "password": "test-only-long-password"}
@@ -40,7 +40,7 @@ def client():
         with TestClient(main.app) as client:
             # This code is gated above to the explicitly supplied disposable test database.
             with Session(sync_engine) as session:
-                for table in [LoginSession, Account, DashboardSetting, EnergySample, GeneratorRun, BatteryAlert, BatteryAlertRule]:
+                for table in [LoginSession, Account, DashboardSetting, EnergySample, GeneratorRun, FuelPrice, BatteryAlert, BatteryAlertRule]:
                     session.execute(delete(table))
                 session.commit()
             auth.setup_token = os.environ["DASHBOARD_SETUP_TOKEN"]
@@ -57,6 +57,7 @@ def create_owner(client):
 def test_all_telemetry_endpoints_require_authentication(client):
     for path in ["/api/live", "/api/devices", "/api/settings", "/api/readings", "/api/reports/generator", "/api/auth/me", "/api/alerts"]:
         assert client.get(path).status_code == 401
+    assert client.put("/api/reports/fuel-prices", json={"effective_at": "2026-09-01T00:00:00Z", "price_per_liter": "20.00"}, headers=HEADERS).status_code == 401
     assert client.put("/api/settings", json={"interval_seconds": 300}, headers=HEADERS).status_code == 401
     assert client.get("/api/health").status_code == 200
     assert client.post("/api/alerts/1/acknowledge", headers=HEADERS).status_code == 401
@@ -175,6 +176,7 @@ def test_owner_manages_viewers(client):
     assert client.get("/api/live").status_code == 200
     assert client.get("/api/readings").status_code == 200
     assert client.get("/api/reports/generator").status_code == 200
+    assert client.put("/api/reports/fuel-prices", json={"effective_at": "2026-09-01T00:00:00Z", "price_per_liter": "20.00"}, headers=HEADERS).status_code == 403
     assert client.get("/api/auth/users").status_code == 403
     assert client.put("/api/settings", json={"interval_seconds": 900}, headers=HEADERS).status_code == 403
     assert client.post("/api/auth/users", json={**viewer_credentials, "role": "viewer"}, headers=HEADERS).status_code == 403
@@ -298,6 +300,40 @@ def test_generator_report_totals(client):
     row = client.get("/api/readings").json()[-1]
     assert row["ac_in_power"] == 3000.0
     assert row["dc_load_power"] == 200.0
+
+
+def test_fuel_prices_persist_and_reprice_only_covered_runs(client):
+    create_owner(client)
+    base = datetime(2026, 9, 10, 10, tzinfo=timezone.utc)
+    with Session(sync_engine) as session:
+        for day in (0, 10):
+            start = base + timedelta(days=day)
+            session.add(GeneratorRun(started_at=start, ended_at=start + timedelta(hours=1),
+                                     updated_at=start + timedelta(hours=1),
+                                     duration_seconds=3600, energy_kwh=2.0))
+        session.commit()
+    path = "/api/reports/generator"
+    params = {"from": "2026-09-01T00:00:00Z", "to": "2026-09-30T23:59:59Z"}
+    price_path = "/api/reports/fuel-prices"
+    body = {"effective_at": "2026-09-15T00:00:00Z", "price_per_liter": "25.00"}
+    assert client.put(price_path, json=body).status_code == 403
+    assert client.put(price_path, json={**body, "price_per_liter": "0"}, headers=HEADERS).status_code == 422
+    assert client.put(price_path, json={**body, "effective_at": "2026-09-15T00:00:00"}, headers=HEADERS).status_code == 422
+    assert client.put(price_path, json=body, headers=HEADERS).status_code == 200
+    data = client.get(path, params=params).json()
+    assert data["fuel_prices"] == [{"effective_at": "2026-09-15T00:00:00+00:00", "price_per_liter": 25.0}]
+    month = data["monthly"][0]
+    assert month["missing_price_runs"] == 1
+    assert month["estimated_cost"] is None
+    earlier = {"effective_at": "2026-09-01T00:00:00Z", "price_per_liter": "20.00"}
+    assert client.put(price_path, json=earlier, headers=HEADERS).status_code == 200
+    month = client.get(path, params=params).json()["monthly"][0]
+    assert month["estimated_cost"] == round(2 * (20 + 25) * 11 / 17.1056, 2)
+    assert client.put(price_path, json={**earlier, "price_per_liter": "22.00"}, headers=HEADERS).status_code == 200
+    assert len(client.get(path, params=params).json()["fuel_prices"]) == 2
+    assert client.delete(price_path, params={"effective_at": earlier["effective_at"]}).status_code == 403
+    assert client.delete(price_path, params={"effective_at": earlier["effective_at"]}, headers=HEADERS).status_code == 200
+    assert client.get(path, params=params).json()["monthly"][0]["estimated_cost"] is None
 
 
 def test_completed_generator_run_updates_its_active_row(client):
