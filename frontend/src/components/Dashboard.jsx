@@ -15,6 +15,8 @@ import { demoSnapshot } from "../demo";
 import { formatPower, setPowerUnit, usePowerUnit } from "../units";
 import Icon from "./Icon";
 import FuelPlanner from "./FuelPlanner";
+import inverterArt from "../assets/victron-inverter.webp";
+import batteryArt from "../assets/flow-battery.webp";
 
 export const number = (value, decimals = 1) =>
   typeof value === "number" && Number.isFinite(value)
@@ -289,10 +291,10 @@ function Flow({ metrics: m, live, activeRun }) {
           </span>
         </div>
         <div className="flow-core">
-          <div className="core-ring">
-            <Icon name="bolt" size={31} />
+          <div className="flow-core-art">
+            <img src={inverterArt} alt="" width="800" height="800" decoding="async" />
           </div>
-          <strong>Energy hub</strong>
+          <strong>Victron system</strong>
           <span>{inverterState(m.inverter_state) ?? "Victron system"}</span>
         </div>
         <div className="flow-node home-node">
@@ -314,14 +316,14 @@ function Flow({ metrics: m, live, activeRun }) {
           </span>
         </div>
         <div className="flow-battery">
-          <Icon name="battery" size={21} />
-          <span>
-            {batteryState(m.battery_power)}
-            {timeToGo && ` · ${timeToGo}`}
+          <span className="flow-battery-art">
+            <img src={batteryArt} alt="" width="800" height="800" decoding="async" />
           </span>
-          <strong>
-            {formatPower(m.battery_power, unit)} {unit}
-          </strong>
+          <span className="flow-battery-reading">
+            <span>Battery · {batteryState(m.battery_power)}</span>
+            <strong>{m.battery_soc == null ? "—" : `${number(m.battery_soc, 0)}%`}</strong>
+            <small>{formatPower(m.battery_power, unit)} {unit}{timeToGo && ` · ${timeToGo}`}</small>
+          </span>
         </div>
       </div>
       <div className="flow-caption">
