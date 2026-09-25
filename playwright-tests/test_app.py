@@ -25,6 +25,11 @@ def test_demo_has_explicit_sample_label_and_energy_flow(page: Page):
     open_demo(page)
     expect(page.locator(".demo-banner")).to_contain_text("Illustrative data")
     expect(page.get_by_role("heading", name="Your energy, in motion.")).to_be_visible()
+    expect(page.locator(".flow-core-art img")).to_be_visible()
+    expect(page.locator(".flow-battery-art img")).to_be_visible()
+    assert page.locator(".flow-core-art img").evaluate("image => image.complete && image.naturalWidth > 0")
+    assert page.locator(".flow-battery-art img").evaluate("image => image.complete && image.naturalWidth > 0")
+    expect(page.locator(".flow-battery-reading")).to_contain_text("81%")
     expect(page.get_by_role("heading", name="Solar input.")).to_be_visible()
     expect(page.get_by_role("heading", name="Generator input.")).to_be_visible()
     expect(page.locator(".grid-card")).to_contain_text("AC input")
@@ -34,6 +39,18 @@ def test_demo_has_explicit_sample_label_and_energy_flow(page: Page):
     assert mix.locator(".seg-dc").evaluate("element => element.getBoundingClientRect().width > 0")
     assert sum(int(value) for value in re.findall(r"(\d+)%", mix.locator(".system-use-legend").inner_text())) == 100
     expect(page.locator(".gauge-number")).to_contain_text("81")
+
+
+def test_big_picture_art_fits_narrow_phone(page: Page):
+    page.set_viewport_size({"width": 320, "height": 900})
+    open_demo(page)
+    scene = page.locator(".flow-scene")
+    battery = page.locator(".flow-battery")
+    core = page.locator(".flow-core-art")
+    assert core.evaluate("element => element.parentElement.querySelector('span').getBoundingClientRect().bottom + 8 <= element.getBoundingClientRect().top")
+    assert battery.evaluate("element => element.getBoundingClientRect().right <= element.closest('.flow-scene').getBoundingClientRect().right")
+    assert core.evaluate("element => element.getBoundingClientRect().right < element.closest('.flow-scene').querySelector('.home-node').getBoundingClientRect().left")
+    expect(scene.locator(".flow-battery-reading")).to_contain_text("1.42 kW")
 
 
 def test_chart_controls(page: Page):

@@ -591,7 +591,7 @@ input {
 .flow-scene {
   height: 305px;
   position: relative;
-  margin: 0 10px;
+  margin: 12px 10px 0;
 }
 .flow-dot-grid {
   position: absolute;
@@ -702,30 +702,43 @@ input {
 .flow-core {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 44%;
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   flex-direction: column;
   white-space: nowrap;
 }
-.core-ring {
-  height: 73px;
-  width: 73px;
+.flow-core-art {
+  order: 1;
+  height: 118px;
+  width: 118px;
+  margin-top: 14px;
   border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: #2e5747;
-  color: #e6edd9;
-  border: 6px solid #eff2e9;
+  overflow: hidden;
+  background: #10271d;
+  border: 3px solid #c8f8d7;
   box-shadow:
-    0 0 0 1px #e0e6d8,
-    0 0 0 10px #f8faf5;
+    0 0 0 5px var(--surface),
+    0 0 0 6px #b2dbbc,
+    0 8px 28px #14452b35;
+}
+.flow-core-art img,
+.flow-battery-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.flow-core-art img {
+  transform: scale(1.75);
+}
+.flow-battery-art img {
+  transform: scale(1.55);
 }
 .flow-core > strong {
   font-size: 12px;
   font-weight: 500;
-  margin-top: 13px;
 }
 .flow-core > span {
   font-size: 10px;
@@ -735,23 +748,39 @@ input {
 .flow-battery {
   position: absolute;
   left: 51%;
-  bottom: 5%;
+  bottom: 3%;
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: var(--tint);
-  border: 1px solid #e3ead7;
-  padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 11px;
+  gap: 8px;
+  background: #10271d;
+  border: 1px solid #438660;
+  padding: 5px 10px 5px 5px;
+  border-radius: 12px;
+  font-size: 10px;
   white-space: nowrap;
-  color: var(--success-text);
+  color: #eaffeb;
+  box-shadow: 0 8px 22px #0a372c27;
 }
-.flow-battery > strong {
-  font-weight: 500;
+.flow-battery-art {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 8px;
 }
-.flow-battery > svg {
-  width: 15px;
+.flow-battery-reading {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.flow-battery-reading > strong {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1;
+}
+.flow-battery-reading > small {
+  color: #b8d9bd;
+  font-size: 9px;
 }
 .flow-caption {
   border-top: 1px solid #eff1eb;
@@ -1573,7 +1602,7 @@ input {
   }
   .flow-scene {
     height: 277px;
-    margin: 0 4px;
+    margin: 12px 4px 0;
   }
   .flow-node {
     grid-template-columns: 25px 1fr;
@@ -1616,9 +1645,16 @@ input {
     display: none;
   }
   .flow-battery {
-    font-size: 10px;
     left: 47%;
-    padding: 7px;
+    gap: 5px;
+    padding: 4px 7px 4px 4px;
+  }
+  .flow-battery-art {
+    width: 48px;
+    height: 48px;
+  }
+  .flow-battery-reading > strong {
+    font-size: 16px;
   }
   .chart-legend {
     gap: 9px;
@@ -1832,7 +1868,6 @@ input {
   }
   .flow-battery {
     left: 52%;
-    font-size: 10px;
   }
   .flow-caption {
     font-size: 10px;
@@ -2113,13 +2148,10 @@ input {
     font-size: 9px;
     margin-top: 4px;
   }
-  .core-ring {
-    width: 58px;
-    height: 58px;
-    border-width: 4px;
-  }
-  .core-ring > svg {
-    width: 24px;
+  .flow-core-art {
+    width: 77px;
+    height: 77px;
+    border-width: 2px;
   }
   .flow-core > strong {
     font-size: 10px;
@@ -2129,13 +2161,23 @@ input {
   }
   .flow-battery {
     left: 43%;
-    font-size: 9px;
     gap: 4px;
-    padding: 6px;
-    bottom: 6%;
+    padding: 4px 6px 4px 4px;
+    bottom: 3%;
   }
-  .flow-battery > svg {
-    width: 13px;
+  .flow-battery-art {
+    width: 43px;
+    height: 43px;
+  }
+  .flow-battery-reading {
+    gap: 2px;
+  }
+  .flow-battery-reading > span,
+  .flow-battery-reading > small {
+    font-size: 8px;
+  }
+  .flow-battery-reading > strong {
+    font-size: 15px;
   }
   .flow-caption {
     padding: 13px 14px;
