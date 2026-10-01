@@ -1,6 +1,7 @@
 services:
   venus-db:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: venus
       POSTGRES_USER: venus
@@ -17,6 +18,7 @@ services:
 
   venus-backend:
     build: ./backend
+    restart: unless-stopped
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://venus:venus@venus-db:5432/venus}
       SYNC_DATABASE_URL: ${SYNC_DATABASE_URL:-postgresql+psycopg2://venus:venus@venus-db:5432/venus}
@@ -48,6 +50,7 @@ services:
 
   venus-frontend:
     build: ./frontend
+    restart: unless-stopped
     depends_on:
       - venus-backend
     networks:
